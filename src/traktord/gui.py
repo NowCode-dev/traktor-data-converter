@@ -2,6 +2,9 @@
 
 Fenetre simple : selectionner un export Rekordbox, convertir vers Traktor
 avec injection automatique des artworks.
+
+Utilise uniquement tk (pas ttk) pour compatibilite maximale avec les
+vieilles versions de Python/macOS.
 """
 
 from __future__ import annotations
@@ -11,7 +14,7 @@ import threading
 import tkinter as tk
 from datetime import datetime
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox
 from typing import Optional
 
 
@@ -51,9 +54,9 @@ def _run_conversion(
     xml_path: str,
     traktor_dir: Path,
     inject_art: bool,
-    on_progress: callable,
-    on_done: callable,
-    on_error: callable,
+    on_progress,
+    on_done,
+    on_error,
 ) -> None:
     """Execute la conversion dans un thread separe."""
     try:
@@ -106,15 +109,30 @@ def _run_conversion(
         # Resume
         summary = f"{total} tracks converties"
         if inject_art:
-            summary += f", {injected} artworks injectes"
+            summary += f"\n{injected} artworks injectes"
         if backup:
-            summary += f"\nBackup : {backup.name}"
+            summary += f"\n\nBackup : {backup.name}"
         summary += f"\nFichier : {nml_path}"
 
         on_done(summary)
 
     except Exception as e:
         on_error(str(e))
+
+
+# ----------------------------------------------------------------------------
+# Couleurs
+# ----------------------------------------------------------------------------
+
+BG = "#2b2b2b"
+BG_LIGHT = "#3c3c3c"
+FG = "#e0e0e0"
+FG_DIM = "#999999"
+ACCENT = "#4fc3f7"
+ACCENT_DARK = "#0288d1"
+BTN_BG = "#4fc3f7"
+BTN_FG = "#1a1a1a"
+ENTRY_BG = "#404040"
 
 
 # ----------------------------------------------------------------------------
@@ -128,98 +146,129 @@ class ConverterApp:
         self.root = tk.Tk()
         self.root.title("Traktor Data Converter")
         self.root.resizable(False, False)
+        self.root.configure(bg=BG)
 
         # Taille et centrage
-        w, h = 520, 420
+        w, h = 500, 380
         sx = self.root.winfo_screenwidth() // 2 - w // 2
         sy = self.root.winfo_screenheight() // 3 - h // 2
         self.root.geometry(f"{w}x{h}+{sx}+{sy}")
-
-        # Style
-        self.root.configure(bg="#1a1a2e")
-        style = ttk.Style()
-        style.theme_use("clam")
-        style.configure("TLabel", background="#1a1a2e", foreground="#e0e0e0", font=("Helvetica", 12))
-        style.configure("Title.TLabel", font=("Helvetica", 18, "bold"), foreground="#00d4ff")
-        style.configure("Sub.TLabel", font=("Helvetica", 10), foreground="#888888")
-        style.configure("Status.TLabel", font=("Helvetica", 11), foreground="#aaaaaa")
-        style.configure("TButton", font=("Helvetica", 12), padding=8)
-        style.configure("Convert.TButton", font=("Helvetica", 14, "bold"), padding=12)
-        style.configure("TCheckbutton", background="#1a1a2e", foreground="#e0e0e0", font=("Helvetica", 11))
-        style.configure(
-            "pointed.Horizontal.TProgressbar",
-            troughcolor="#2a2a4a",
-            background="#00d4ff",
-        )
 
         self._build_ui()
         self._detect_traktor()
 
     def _build_ui(self) -> None:
-        pad = {"padx": 20, "pady": 4}
-        frame = self.root
+        root = self.root
+        font_title = ("Helvetica", 20, "bold")
+        font_sub = ("Helvetica", 11)
+        font_normal = ("Helvetica", 12)
+        font_btn = ("Helvetica", 13, "bold")
+        font_small = ("Helvetica", 10)
 
-        # Titre
-        ttk.Label(frame, text="Traktor Data Converter", style="Title.TLabel").pack(pady=(20, 2))
-        ttk.Label(frame, text="Rekordbox → Traktor Pro 4", style="Sub.TLabel").pack(pady=(0, 16))
+        # --- Titre ---
+        tk.Label(
+            root, text="Traktor Data Converter",
+            font=font_title, fg=ACCENT, bg=BG,
+        ).pack(pady=(18, 0))
+        tk.Label(
+            root, text="Rekordbox  \u2192  Traktor Pro 4",
+            font=font_sub, fg=FG_DIM, bg=BG,
+        ).pack(pady=(0, 14))
 
-        # Export Rekordbox
-        ttk.Label(frame, text="Export Rekordbox (.xml)").pack(anchor="w", **pad)
-        file_frame = tk.Frame(frame, bg="#1a1a2e")
-        file_frame.pack(fill="x", padx=20, pady=(0, 10))
+        # --- Export Rekordbox ---
+        tk.Label(
+            root, text="Export Rekordbox (.xml)",
+            font=font_normal, fg=FG, bg=BG, anchor="w",
+        ).pack(fill="x", padx=24)
 
+        row1 = tk.Frame(root, bg=BG)
+        row1.pack(fill="x", padx=24, pady=(2, 10))
         self.xml_var = tk.StringVar()
-        self.xml_entry = ttk.Entry(file_frame, textvariable=self.xml_var, width=42)
-        self.xml_entry.pack(side="left", fill="x", expand=True)
-        ttk.Button(file_frame, text="Parcourir", command=self._browse_xml).pack(side="right", padx=(8, 0))
+        tk.Entry(
+            row1, textvariable=self.xml_var,
+            font=font_small, bg=ENTRY_BG, fg=FG,
+            insertbackground=FG, relief="flat", highlightthickness=1,
+            highlightbackground="#555", highlightcolor=ACCENT,
+        ).pack(side="left", fill="x", expand=True, ipady=4)
+        tk.Button(
+            row1, text="Parcourir", command=self._browse_xml,
+            font=font_small, bg=BG_LIGHT, fg=FG,
+            activebackground="#555", activeforeground=FG,
+            relief="flat", padx=10, pady=2,
+        ).pack(side="right", padx=(8, 0))
 
-        # Dossier Traktor (auto-detecte)
-        ttk.Label(frame, text="Dossier Traktor 4 (auto-detecte)").pack(anchor="w", **pad)
-        traktor_frame = tk.Frame(frame, bg="#1a1a2e")
-        traktor_frame.pack(fill="x", padx=20, pady=(0, 10))
+        # --- Dossier Traktor ---
+        tk.Label(
+            root, text="Dossier Traktor 4 (auto-detecte)",
+            font=font_normal, fg=FG, bg=BG, anchor="w",
+        ).pack(fill="x", padx=24)
 
+        row2 = tk.Frame(root, bg=BG)
+        row2.pack(fill="x", padx=24, pady=(2, 10))
         self.traktor_var = tk.StringVar()
-        self.traktor_entry = ttk.Entry(traktor_frame, textvariable=self.traktor_var, width=42)
-        self.traktor_entry.pack(side="left", fill="x", expand=True)
-        ttk.Button(traktor_frame, text="Changer", command=self._browse_traktor).pack(side="right", padx=(8, 0))
+        tk.Entry(
+            row2, textvariable=self.traktor_var,
+            font=font_small, bg=ENTRY_BG, fg=FG,
+            insertbackground=FG, relief="flat", highlightthickness=1,
+            highlightbackground="#555", highlightcolor=ACCENT,
+        ).pack(side="left", fill="x", expand=True, ipady=4)
+        tk.Button(
+            row2, text="Changer", command=self._browse_traktor,
+            font=font_small, bg=BG_LIGHT, fg=FG,
+            activebackground="#555", activeforeground=FG,
+            relief="flat", padx=10, pady=2,
+        ).pack(side="right", padx=(8, 0))
 
-        # Checkbox artworks
+        # --- Checkbox artworks ---
         self.artwork_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(
-            frame,
-            text="Injecter les artworks (pochettes) dans les MP3",
+        tk.Checkbutton(
+            root, text="  Injecter les artworks (pochettes) dans les MP3",
             variable=self.artwork_var,
-        ).pack(anchor="w", padx=20, pady=(4, 12))
+            font=font_normal, fg=FG, bg=BG,
+            selectcolor=BG_LIGHT, activebackground=BG, activeforeground=FG,
+        ).pack(anchor="w", padx=20, pady=(2, 14))
 
-        # Bouton Convertir
-        self.convert_btn = ttk.Button(
-            frame,
-            text="Convertir",
-            style="Convert.TButton",
-            command=self._start_conversion,
+        # --- Bouton Convertir ---
+        self.convert_btn = tk.Button(
+            root, text="CONVERTIR", command=self._start_conversion,
+            font=font_btn, bg=BTN_BG, fg=BTN_FG,
+            activebackground=ACCENT_DARK, activeforeground="white",
+            relief="flat", padx=40, pady=8, cursor="hand2",
         )
-        self.convert_btn.pack(pady=(4, 12))
+        self.convert_btn.pack(pady=(0, 14))
 
-        # Progress bar
-        self.progress = ttk.Progressbar(
-            frame,
-            style="pointed.Horizontal.TProgressbar",
-            length=460,
-            mode="determinate",
+        # --- Barre de progression (canvas) ---
+        self.progress_canvas = tk.Canvas(
+            root, height=14, bg=BG, highlightthickness=0,
         )
-        self.progress.pack(pady=(0, 6))
+        self.progress_canvas.pack(fill="x", padx=24, pady=(0, 6))
+        self._progress_value = 0.0
 
-        # Status
+        # --- Status ---
         self.status_var = tk.StringVar(value="Pret")
-        ttk.Label(frame, textvariable=self.status_var, style="Status.TLabel").pack(pady=(0, 10))
+        tk.Label(
+            root, textvariable=self.status_var,
+            font=font_small, fg=FG_DIM, bg=BG,
+        ).pack()
+
+    def _draw_progress(self, fraction: float) -> None:
+        """Dessiner la barre de progression (0.0 a 1.0)."""
+        c = self.progress_canvas
+        c.delete("all")
+        w = c.winfo_width() or 452
+        h = 14
+        # Fond
+        c.create_rectangle(0, 0, w, h, fill=BG_LIGHT, outline="")
+        # Barre
+        if fraction > 0:
+            c.create_rectangle(0, 0, int(w * fraction), h, fill=ACCENT, outline="")
 
     def _detect_traktor(self) -> None:
         traktor = _find_traktor4_dir()
         if traktor:
             self.traktor_var.set(str(traktor))
         else:
-            self.traktor_var.set("")
-            self.status_var.set("Traktor 4 non detecte — selectionner le dossier manuellement")
+            self.status_var.set("Traktor 4 non detecte — cliquer 'Changer'")
 
     def _browse_xml(self) -> None:
         path = filedialog.askopenfilename(
@@ -251,8 +300,8 @@ class ConverterApp:
             messagebox.showerror("Erreur", f"Dossier introuvable :\n{traktor}")
             return
 
-        self.convert_btn.configure(state="disabled")
-        self.progress["value"] = 0
+        self.convert_btn.configure(state="disabled", bg=FG_DIM)
+        self._draw_progress(0)
 
         thread = threading.Thread(
             target=_run_conversion,
@@ -272,22 +321,21 @@ class ConverterApp:
         def _update():
             self.status_var.set(message)
             if total > 0:
-                self.progress["maximum"] = total
-                self.progress["value"] = current
+                self._draw_progress(current / total)
         self.root.after(0, _update)
 
     def _on_done(self, summary: str) -> None:
         def _update():
-            self.progress["value"] = self.progress["maximum"]
+            self._draw_progress(1.0)
             self.status_var.set("Conversion terminee !")
-            self.convert_btn.configure(state="normal")
+            self.convert_btn.configure(state="normal", bg=BTN_BG)
             messagebox.showinfo("Conversion terminee", summary)
         self.root.after(0, _update)
 
     def _on_error(self, error: str) -> None:
         def _update():
             self.status_var.set("Erreur")
-            self.convert_btn.configure(state="normal")
+            self.convert_btn.configure(state="normal", bg=BTN_BG)
             messagebox.showerror("Erreur", error)
         self.root.after(0, _update)
 
