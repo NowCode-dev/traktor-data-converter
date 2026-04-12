@@ -35,6 +35,9 @@ dev = [
 [project.scripts]
 traktor-convert = "traktord.cli:cli"
 
+[project.gui-scripts]
+traktor-converter = "traktord.gui:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
