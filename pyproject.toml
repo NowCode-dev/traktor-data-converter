@@ -22,7 +22,6 @@ dependencies = [
     "mutagen>=1.47",
     "Pillow>=10.0",
     "eval-type-backport>=0.2.0; python_version < '3.10'",
-    "customtkinter>=5.2",
 ]
 
 [project.optional-dependencies]
