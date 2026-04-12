@@ -1,10 +1,7 @@
 """Interface graphique Traktor Data Converter.
 
-Fenetre simple : selectionner un export Rekordbox, convertir vers Traktor
-avec injection automatique des artworks.
-
+Utilise customtkinter pour un rendu correct sur macOS (dark mode).
 Charte graphique NowCode : fond anthracite, accent cyan, texte silver.
-Couleurs forcees sur chaque widget pour contourner le dark mode macOS.
 """
 
 from __future__ import annotations
@@ -17,13 +14,27 @@ from pathlib import Path
 from tkinter import filedialog, messagebox
 from typing import Optional
 
+import customtkinter as ctk
+
+
+# ----------------------------------------------------------------------------
+# Charte NowCode
+# ----------------------------------------------------------------------------
+
+BG = "#12161D"
+BG_FIELD = "#1E2532"
+FG = "#D2DEE3"
+FG_DIM = "#7A8A94"
+ACCENT = "#15E9F2"
+ACCENT_HOVER = "#3AB2CD"
+BTN_FG = "#12161D"
+
 
 # ----------------------------------------------------------------------------
 # Detection automatique
 # ----------------------------------------------------------------------------
 
 def _find_traktor4_dir() -> Optional[Path]:
-    """Trouver le dossier Traktor 4 dans ~/Documents/Native Instruments."""
     ni_dir = Path.home() / "Documents" / "Native Instruments"
     if not ni_dir.exists():
         return None
@@ -34,7 +45,6 @@ def _find_traktor4_dir() -> Optional[Path]:
 
 
 def _backup_collection(traktor_dir: Path) -> Optional[Path]:
-    """Sauvegarder le collection.nml existant avant ecrasement."""
     nml = traktor_dir / "collection.nml"
     if not nml.exists():
         return None
@@ -58,7 +68,6 @@ def _run_conversion(
     on_done,
     on_error,
 ) -> None:
-    """Execute la conversion dans un thread separe."""
     try:
         from traktord.parsers.rekordbox import RekordboxParser
         from traktord.converters.traktor import TraktorWriter
@@ -120,156 +129,130 @@ def _run_conversion(
 # Interface graphique
 # ----------------------------------------------------------------------------
 
-# Charte NowCode
-BG = "#12161D"
-BG_FIELD = "#1E2532"
-FG = "#D2DEE3"
-FG_DIM = "#7A8A94"
-ACCENT = "#15E9F2"
-ACCENT_DARK = "#3AB2CD"
-BTN_FG = "#12161D"
-BAR_BG = "#1E2532"
-
-
-def _load_logo() -> Optional[tk.PhotoImage]:
-    """Charger le logo NowCode depuis le package."""
-    logo_path = Path(__file__).parent / "logo.png"
-    if not logo_path.exists():
-        return None
-    try:
-        return tk.PhotoImage(file=str(logo_path))
-    except Exception:
-        return None
-
-
-class ConverterApp:
+class ConverterApp(ctk.CTk):
     """Fenetre principale du convertisseur."""
 
     def __init__(self) -> None:
-        self.root = tk.Tk()
-        self.root.title("Traktor Data Converter — NowCode")
-        self.root.resizable(False, False)
-        self.root.configure(bg=BG)
+        super().__init__()
 
-        w, h = 560, 430
-        sx = self.root.winfo_screenwidth() // 2 - w // 2
-        sy = self.root.winfo_screenheight() // 3 - h // 2
-        self.root.geometry(f"{w}x{h}+{sx}+{sy}")
+        # Theme customtkinter
+        ctk.set_appearance_mode("dark")
+        ctk.set_default_color_theme("dark-blue")
+
+        self.title("Traktor Data Converter — NowCode")
+        self.resizable(False, False)
+        self.configure(fg_color=BG)
+
+        w, h = 560, 440
+        sx = self.winfo_screenwidth() // 2 - w // 2
+        sy = self.winfo_screenheight() // 3 - h // 2
+        self.geometry(f"{w}x{h}+{sx}+{sy}")
 
         self._build_ui()
         self._detect_traktor()
 
     def _build_ui(self) -> None:
-        root = self.root
-
         # --- Logo NowCode ---
-        self._logo_img = _load_logo()
-        if self._logo_img:
-            # Reduire a ~128px de large
-            self._logo_small = self._logo_img.subsample(2, 2)
-            tk.Label(root, image=self._logo_small, bg=BG).pack(pady=(14, 4))
+        logo_path = Path(__file__).parent / "logo.png"
+        if logo_path.exists():
+            try:
+                self._logo_img = tk.PhotoImage(file=str(logo_path)).subsample(2, 2)
+                tk.Label(self, image=self._logo_img, bg=BG).pack(pady=(16, 4))
+            except Exception:
+                pass
 
         # --- Titre ---
-        tk.Label(
-            root, text="Traktor Data Converter",
-            font=("Helvetica", 20, "bold"), fg=ACCENT, bg=BG,
+        ctk.CTkLabel(
+            self, text="Traktor Data Converter",
+            font=ctk.CTkFont(size=22, weight="bold"),
+            text_color=ACCENT,
         ).pack(pady=(4, 0))
-        tk.Label(
-            root, text="Rekordbox  \u2192  Traktor Pro 4",
-            font=("Helvetica", 11), fg=FG_DIM, bg=BG,
-        ).pack(pady=(0, 14))
+        ctk.CTkLabel(
+            self, text="Rekordbox  \u2192  Traktor Pro 4",
+            font=ctk.CTkFont(size=12),
+            text_color=FG_DIM,
+        ).pack(pady=(0, 16))
 
         # --- Export Rekordbox ---
-        tk.Label(
-            root, text="Export Rekordbox (.xml)",
-            font=("Helvetica", 12), fg=FG, bg=BG, anchor="w",
-        ).pack(fill="x", padx=28)
+        ctk.CTkLabel(
+            self, text="Export Rekordbox (.xml)",
+            font=ctk.CTkFont(size=13), text_color=FG, anchor="w",
+        ).pack(fill="x", padx=30)
 
-        row1 = tk.Frame(root, bg=BG)
-        row1.pack(fill="x", padx=28, pady=(2, 8))
+        row1 = ctk.CTkFrame(self, fg_color=BG)
+        row1.pack(fill="x", padx=30, pady=(2, 10))
         self.xml_var = tk.StringVar()
-        tk.Entry(
-            row1, textvariable=self.xml_var, font=("Helvetica", 11),
-            bg=BG_FIELD, fg=FG, insertbackground=FG,
-            relief="flat", highlightthickness=1,
-            highlightbackground="#2a3040", highlightcolor=ACCENT,
-        ).pack(side="left", fill="x", expand=True, ipady=4)
-        tk.Button(
-            row1, text="Parcourir...", command=self._browse_xml,
-            font=("Helvetica", 11), bg="#2a3040", fg=FG,
-            activebackground=ACCENT_DARK, activeforeground=BTN_FG,
-            relief="flat", padx=10, pady=2, cursor="hand2",
+        ctk.CTkEntry(
+            row1, textvariable=self.xml_var, width=380,
+            font=ctk.CTkFont(size=12),
+            fg_color=BG_FIELD, text_color=FG, border_color=ACCENT_HOVER,
+        ).pack(side="left", fill="x", expand=True)
+        ctk.CTkButton(
+            row1, text="Parcourir", command=self._browse_xml, width=90,
+            font=ctk.CTkFont(size=12),
+            fg_color=BG_FIELD, hover_color=ACCENT_HOVER, text_color=FG,
         ).pack(side="right", padx=(8, 0))
 
         # --- Dossier Traktor ---
-        tk.Label(
-            root, text="Dossier Traktor 4 (auto-detecte)",
-            font=("Helvetica", 12), fg=FG, bg=BG, anchor="w",
-        ).pack(fill="x", padx=28)
+        ctk.CTkLabel(
+            self, text="Dossier Traktor 4 (auto-detecte)",
+            font=ctk.CTkFont(size=13), text_color=FG, anchor="w",
+        ).pack(fill="x", padx=30)
 
-        row2 = tk.Frame(root, bg=BG)
-        row2.pack(fill="x", padx=28, pady=(2, 8))
+        row2 = ctk.CTkFrame(self, fg_color=BG)
+        row2.pack(fill="x", padx=30, pady=(2, 10))
         self.traktor_var = tk.StringVar()
-        tk.Entry(
-            row2, textvariable=self.traktor_var, font=("Helvetica", 11),
-            bg=BG_FIELD, fg=FG, insertbackground=FG,
-            relief="flat", highlightthickness=1,
-            highlightbackground="#2a3040", highlightcolor=ACCENT,
-        ).pack(side="left", fill="x", expand=True, ipady=4)
-        tk.Button(
-            row2, text="Changer...", command=self._browse_traktor,
-            font=("Helvetica", 11), bg="#2a3040", fg=FG,
-            activebackground=ACCENT_DARK, activeforeground=BTN_FG,
-            relief="flat", padx=10, pady=2, cursor="hand2",
+        ctk.CTkEntry(
+            row2, textvariable=self.traktor_var, width=380,
+            font=ctk.CTkFont(size=12),
+            fg_color=BG_FIELD, text_color=FG, border_color=ACCENT_HOVER,
+        ).pack(side="left", fill="x", expand=True)
+        ctk.CTkButton(
+            row2, text="Changer", command=self._browse_traktor, width=90,
+            font=ctk.CTkFont(size=12),
+            fg_color=BG_FIELD, hover_color=ACCENT_HOVER, text_color=FG,
         ).pack(side="right", padx=(8, 0))
 
         # --- Checkbox artworks ---
         self.artwork_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(
-            root, text="  Injecter les artworks (pochettes) dans les MP3",
-            variable=self.artwork_var, font=("Helvetica", 11),
-            fg=FG, bg=BG, selectcolor=BG_FIELD,
-            activebackground=BG, activeforeground=FG,
-        ).pack(anchor="w", padx=24, pady=(4, 14))
+        ctk.CTkCheckBox(
+            self, text="Injecter les artworks (pochettes) dans les MP3",
+            variable=self.artwork_var,
+            font=ctk.CTkFont(size=12), text_color=FG,
+            fg_color=ACCENT, hover_color=ACCENT_HOVER,
+            checkmark_color=BTN_FG,
+        ).pack(anchor="w", padx=30, pady=(2, 16))
 
         # --- Bouton Convertir ---
-        self.convert_btn = tk.Button(
-            root, text="CONVERTIR", command=self._start_conversion,
-            font=("Helvetica", 14, "bold"),
-            bg=ACCENT, fg=BTN_FG,
-            activebackground=ACCENT_DARK, activeforeground=BTN_FG,
-            relief="flat", padx=40, pady=8, cursor="hand2",
+        self.convert_btn = ctk.CTkButton(
+            self, text="CONVERTIR", command=self._start_conversion,
+            font=ctk.CTkFont(size=16, weight="bold"),
+            fg_color=ACCENT, hover_color=ACCENT_HOVER, text_color=BTN_FG,
+            height=44, corner_radius=8,
         )
-        self.convert_btn.pack(pady=(0, 12))
+        self.convert_btn.pack(pady=(0, 14))
 
         # --- Barre de progression ---
-        self.progress_canvas = tk.Canvas(
-            root, height=10, bg=BG, highlightthickness=0,
+        self.progress = ctk.CTkProgressBar(
+            self, width=500, height=10,
+            fg_color=BG_FIELD, progress_color=ACCENT,
         )
-        self.progress_canvas.pack(fill="x", padx=28, pady=(0, 6))
+        self.progress.pack(padx=30, pady=(0, 8))
+        self.progress.set(0)
 
         # --- Status ---
-        self.status_var = tk.StringVar(value="Pret")
-        tk.Label(
-            root, textvariable=self.status_var,
-            font=("Helvetica", 10), fg=FG_DIM, bg=BG,
-        ).pack()
-
-    def _draw_progress(self, fraction: float) -> None:
-        c = self.progress_canvas
-        c.delete("all")
-        w = c.winfo_width() or 504
-        h = 10
-        c.create_rectangle(0, 0, w, h, fill=BAR_BG, outline="")
-        if fraction > 0:
-            c.create_rectangle(0, 0, int(w * fraction), h, fill=ACCENT, outline="")
+        self.status_label = ctk.CTkLabel(
+            self, text="Pret",
+            font=ctk.CTkFont(size=11), text_color=FG_DIM,
+        )
+        self.status_label.pack()
 
     def _detect_traktor(self) -> None:
         traktor = _find_traktor4_dir()
         if traktor:
             self.traktor_var.set(str(traktor))
         else:
-            self.status_var.set("Traktor 4 non detecte — cliquer 'Changer'")
+            self.status_label.configure(text="Traktor 4 non detecte — cliquer 'Changer'")
 
     def _browse_xml(self) -> None:
         path = filedialog.askopenfilename(
@@ -301,8 +284,8 @@ class ConverterApp:
             messagebox.showerror("Erreur", f"Dossier introuvable :\n{traktor}")
             return
 
-        self.convert_btn.configure(state="disabled", bg=FG_DIM)
-        self._draw_progress(0)
+        self.convert_btn.configure(state="disabled", fg_color=FG_DIM)
+        self.progress.set(0)
 
         thread = threading.Thread(
             target=_run_conversion,
@@ -320,34 +303,31 @@ class ConverterApp:
 
     def _on_progress(self, message: str, current: int, total: int) -> None:
         def _update():
-            self.status_var.set(message)
+            self.status_label.configure(text=message)
             if total > 0:
-                self._draw_progress(current / total)
-        self.root.after(0, _update)
+                self.progress.set(current / total)
+        self.after(0, _update)
 
     def _on_done(self, summary: str) -> None:
         def _update():
-            self._draw_progress(1.0)
-            self.status_var.set("Conversion terminee !")
-            self.convert_btn.configure(state="normal", bg=ACCENT)
+            self.progress.set(1.0)
+            self.status_label.configure(text="Conversion terminee !")
+            self.convert_btn.configure(state="normal", fg_color=ACCENT)
             messagebox.showinfo("Conversion terminee", summary)
-        self.root.after(0, _update)
+        self.after(0, _update)
 
     def _on_error(self, error: str) -> None:
         def _update():
-            self.status_var.set("Erreur")
-            self.convert_btn.configure(state="normal", bg=ACCENT)
+            self.status_label.configure(text="Erreur")
+            self.convert_btn.configure(state="normal", fg_color=ACCENT)
             messagebox.showerror("Erreur", error)
-        self.root.after(0, _update)
-
-    def run(self) -> None:
-        self.root.mainloop()
+        self.after(0, _update)
 
 
 def main() -> None:
     """Point d'entree de l'interface graphique."""
     app = ConverterApp()
-    app.run()
+    app.mainloop()
 
 
 if __name__ == "__main__":
