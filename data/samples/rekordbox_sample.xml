@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DJ_PLAYLISTS Version="1.0.0">
+  <PRODUCT Name="rekordbox" Version="6.7.4" Company="AlphaTheta"/>
+  <COLLECTION Entries="3">
+    <TRACK TrackID="1" Name="Strobe" Artist="Deadmau5" Album="For Lack of a Better Name"
+           Genre="Progressive House" Kind="MP3 File" Size="15432000" TotalTime="632"
+           TrackNumber="5" DiscNumber="1" Year="2009" AverageBpm="128.00"
+           DateAdded="2024-01-15" BitRate="320" SampleRate="44100"
+           Comments="Classic track" PlayCount="12" Rating="255"
+           Location="file://localhost/Users/lorys/Music/DJ/Deadmau5%20-%20Strobe.mp3"
+           Tonality="Am" Label="Mau5trap" Remixer="" Mix="Original Mix">
+      <TEMPO Inizio="0.035" Bpm="128.00" Metro="4/4" Battito="1"/>
+      <POSITION_MARK Name="Intro" Type="0" Start="0.500" End="-1" Num="0" Red="40" Green="226" Blue="20"/>
+      <POSITION_MARK Name="Build" Type="0" Start="120.000" End="-1" Num="1" Red="230" Green="50" Blue="50"/>
+      <POSITION_MARK Name="Drop" Type="0" Start="240.500" End="-1" Num="2" Red="200" Green="150" Blue="0"/>
+      <POSITION_MARK Name="Loop 8bar" Type="4" Start="240.500" End="255.500" Num="3" Red="0" Green="100" Blue="255"/>
+      <POSITION_MARK Name="Memory" Type="0" Start="480.000" End="-1" Num="-1" Red="0" Green="0" Blue="0"/>
+    </TRACK>
+    <TRACK TrackID="2" Name="Opus" Artist="Eric Prydz" Album="Opus"
+           Genre="Progressive House" Kind="WAV File" Size="98765000" TotalTime="540"
+           TrackNumber="1" Year="2016" AverageBpm="126.50"
+           DateAdded="2024-02-20" BitRate="1411" SampleRate="44100"
+           PlayCount="8" Rating="204"
+           Location="file://localhost/Users/lorys/Music/DJ/Eric%20Prydz%20-%20Opus.wav"
+           Tonality="F#m">
+      <TEMPO Inizio="0.020" Bpm="126.50" Metro="4/4" Battito="1"/>
+      <POSITION_MARK Name="Start" Type="0" Start="0.020" End="-1" Num="0" Red="40" Green="226" Blue="20"/>
+      <POSITION_MARK Name="Break" Type="0" Start="180.000" End="-1" Num="1" Red="230" Green="50" Blue="50"/>
+    </TRACK>
+    <TRACK TrackID="3" Name="Cafe Del Mar" Artist="Energy 52" Album=""
+           Genre="Trance" Kind="FLAC File" Size="45000000" TotalTime="420"
+           Year="1993" AverageBpm="135.00"
+           DateAdded="2023-06-01" BitRate="1000" SampleRate="44100"
+           PlayCount="3" Rating="153"
+           Location="file://localhost/C:/Users/lorys/Music/DJ/Energy%2052%20-%20Cafe%20Del%20Mar.flac"
+           Tonality="Db">
+      <TEMPO Inizio="0.100" Bpm="135.00" Metro="4/4" Battito="1"/>
+      <POSITION_MARK Name="Drop" Type="0" Start="60.000" End="-1" Num="0" Red="200" Green="150" Blue="0"/>
+    </TRACK>
+  </COLLECTION>
+  <PLAYLISTS>
+    <NODE Type="0" Name="ROOT" Count="2">
+      <NODE Type="1" Name="Favorites" KeyType="0" Entries="2">
+        <TRACK Key="1"/>
+        <TRACK Key="2"/>
+      </NODE>
+      <NODE Type="0" Name="Sets" Count="1">
+        <NODE Type="1" Name="Summer 2024" KeyType="0" Entries="3">
+          <TRACK Key="1"/>
+          <TRACK Key="2"/>
+          <TRACK Key="3"/>
+        </NODE>
+      </NODE>
+    </NODE>
+  </PLAYLISTS>
+</DJ_PLAYLISTS>

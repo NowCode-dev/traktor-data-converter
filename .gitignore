@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+data/output/*
+!data/output/.gitkeep
+*.bak
+*.log
+
+# Fichiers lourds (MP3, exports, dumps)
+data/inspection/
+data/Exemple/
+data/ExportRB_*.xml
+data/test_injection/
+inspection_dump/
+traktor_coverart_investigation/
+traktor_coverart_investigation.zip
+*.mp3
+*.wav
+*.flac
+*.aiff
