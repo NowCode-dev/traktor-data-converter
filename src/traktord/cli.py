@@ -29,24 +29,23 @@ def _find_traktor4_coverart_dir() -> Path | None:
     return None
 
 
-def _inject_artworks(collection) -> None:
-    """Injecter les artworks PRIV:TRAKTOR4 + cache files pour chaque track."""
-    from traktord.utils.trmd import inject_artwork
+def _inject_metadata(collection) -> None:
+    """Injecter les metadonnees completes (PRIV:TRAKTOR4 + COMM + POPM + artwork)."""
+    from traktord.utils.trmd import inject_full_metadata
 
     coverart_dir = _find_traktor4_coverart_dir()
     if coverart_dir is None:
         console.print(
             "[yellow]Dossier Coverart Traktor 4 introuvable — "
-            "seules les frames PRIV seront ecrites.[/]"
+            "les artworks ne seront pas mis en cache (mais dans le PRIV).[/]"
         )
 
-    console.print(f"\n[bold]Injection des artworks...[/]")
+    console.print(f"\n[bold]Injection des metadonnees dans les MP3...[/]")
     if coverart_dir:
-        console.print(f"  Cache : [dim]{coverart_dir}[/]")
+        console.print(f"  Cache Coverart : [dim]{coverart_dir}[/]")
 
     injected = 0
     skipped_missing = 0
-    skipped_no_apic = 0
     errors = 0
 
     with Progress(
@@ -56,26 +55,18 @@ def _inject_artworks(collection) -> None:
         MofNCompleteColumn(),
         console=console,
     ) as progress:
-        task = progress.add_task("Artworks", total=len(collection.tracks))
+        task = progress.add_task("Tracks", total=len(collection.tracks))
 
         for track in collection.tracks:
             mp3_path = Path(track.file_path)
-            if not mp3_path.exists():
-                skipped_missing += 1
-                progress.advance(task)
-                continue
-
-            if not mp3_path.suffix.lower() == ".mp3":
+            if not mp3_path.exists() or mp3_path.suffix.lower() != ".mp3":
                 skipped_missing += 1
                 progress.advance(task)
                 continue
 
             try:
-                result = inject_artwork(mp3_path, coverart_dir)
-                if result is None:
-                    skipped_no_apic += 1
-                else:
-                    injected += 1
+                inject_full_metadata(mp3_path, track, coverart_dir)
+                injected += 1
             except Exception as e:
                 errors += 1
                 console.print(f"  [red]Erreur[/] {mp3_path.name}: {e}")
@@ -83,8 +74,6 @@ def _inject_artworks(collection) -> None:
             progress.advance(task)
 
     console.print(f"\n  [green]Injectes[/]     : {injected}")
-    if skipped_no_apic:
-        console.print(f"  [dim]Sans APIC[/]    : {skipped_no_apic}")
     if skipped_missing:
         console.print(f"  [dim]Non trouves[/]  : {skipped_missing}")
     if errors:
@@ -156,8 +145,9 @@ def cli():
     help="Nom du volume macOS (ex: 'Mac HD').",
 )
 @click.option(
-    "--artwork", is_flag=True, default=False,
-    help="Injecter les artworks dans les MP3 (PRIV:TRAKTOR4 + cache files).",
+    "--inject/--no-inject", default=True,
+    help="Injecter les metadonnees completes (cues, BPM, key, artwork, comments, rating) "
+         "dans les MP3 via PRIV:TRAKTOR4 + COMM + POPM. Active par defaut.",
 )
 def convert(
     source: str,
@@ -166,7 +156,7 @@ def convert(
     output: str | None,
     dry_run: bool,
     volume: str | None,
-    artwork: bool,
+    inject: bool,
 ):
     """Convertir une bibliotheque DJ d'un format a un autre."""
     console.print(f"[bold blue]Traktor Data Converter v{__version__}[/]\n")
@@ -212,9 +202,9 @@ def convert(
     writer = _get_writer(target_format)
     writer.write(collection, output_path, volume_name=volume)
 
-    # Injection des artworks (PRIV:TRAKTOR4 + cache files)
-    if artwork and target_format == "traktor":
-        _inject_artworks(collection)
+    # Injection des metadonnees completes (PRIV:TRAKTOR4 + COMM + POPM + artwork)
+    if inject and target_format == "traktor":
+        _inject_metadata(collection)
 
     console.print(f"\n[bold green]Conversion terminee ![/]")
     console.print(f"  {source_format} → {target_format}")

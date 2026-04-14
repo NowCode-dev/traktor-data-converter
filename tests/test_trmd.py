@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from traktord.models.track import CuePoint, Track
 from traktord.utils.coverart import CoverArtImage
 from traktord.utils.trmd import (
     CHUNK_HEADER_SIZE,
@@ -17,11 +18,14 @@ from traktord.utils.trmd import (
     VRSN_VALUE,
     Chunk,
     build_artw_body,
+    build_cuep_body,
+    build_full_trmd,
     build_minimal_trmd,
     find_chunk,
     generate_coverid,
     parse_artw_body,
     parse_chunk,
+    parse_cuep_body,
     parse_trmd,
 )
 
@@ -396,3 +400,151 @@ class TestRealFiles:
         assert vrsn is not None
         val = struct.unpack("<I", vrsn.data)[0]
         assert val == VRSN_VALUE
+
+
+# ----------------------------------------------------------------------------
+# CUEP - cue points encoding
+# ----------------------------------------------------------------------------
+
+class TestCuepBody:
+    """Encodage/decodage du chunk CUEP."""
+
+    def test_empty_cues(self) -> None:
+        body = build_cuep_body([], grid_offset_ms=None)
+        cues = parse_cuep_body(body)
+        assert cues == []
+
+    def test_grid_only(self) -> None:
+        body = build_cuep_body([], grid_offset_ms=143.0)
+        cues = parse_cuep_body(body)
+        assert len(cues) == 1
+        assert cues[0]["name"] == "AutoGrid"
+        assert cues[0]["type"] == 4
+        assert cues[0]["position_ms"] == 143.0
+        assert cues[0]["hotcue"] == -1
+
+    def test_multiple_cues_roundtrip(self) -> None:
+        cues_in = [
+            CuePoint(name="Intro", type="cue", position_ms=100.5, hotcue=0),
+            CuePoint(name="Drop", type="cue", position_ms=45000.0, hotcue=1),
+            CuePoint(name="Loop", type="loop", position_ms=90000.0,
+                     length_ms=8000.0, hotcue=2),
+        ]
+        body = build_cuep_body(cues_in, grid_offset_ms=50.0)
+        cues_out = parse_cuep_body(body)
+
+        # grid + 3 cues = 4
+        assert len(cues_out) == 4
+        assert cues_out[0]["name"] == "AutoGrid"
+        assert cues_out[0]["type"] == 4
+        assert cues_out[1]["name"] == "Intro"
+        assert cues_out[1]["type"] == 0
+        assert cues_out[1]["position_ms"] == 100.5
+        assert cues_out[1]["hotcue"] == 0
+        assert cues_out[3]["name"] == "Loop"
+        assert cues_out[3]["type"] == 5
+        assert cues_out[3]["length_ms"] == 8000.0
+
+    def test_cue_size_formula(self) -> None:
+        """Chaque cue = 40 + strlen*2 bytes."""
+        cues = [CuePoint(name="ABC", type="cue", position_ms=0.0, hotcue=0)]
+        body = build_cuep_body(cues, grid_offset_ms=None)
+        # 4 bytes num + 1 cue (40 + 3*2 = 46 bytes) = 50 bytes
+        assert len(body) == 4 + 40 + 3 * 2
+
+
+# ----------------------------------------------------------------------------
+# build_full_trmd
+# ----------------------------------------------------------------------------
+
+class TestBuildFullTrmd:
+    """TRMD complet avec toutes les metadonnees."""
+
+    def test_minimal_track(self) -> None:
+        track = Track(title="Hello", artist="World", bpm=128.0)
+        blob = build_full_trmd(track)
+        root = parse_trmd(blob)
+        assert root.fourcc == "TRMD"
+        assert len(root.children) == 2
+
+    def test_all_chunks_present(self) -> None:
+        """Verifie la presence des chunks critiques."""
+        track = Track(
+            title="Track Title",
+            artist="Artist Name",
+            album="Album",
+            key="Am",
+            bpm=138.0,
+            duration=300,
+            bitrate=320,
+            label="Label Name",
+            grid_offset_ms=100.0,
+            cue_points=[
+                CuePoint(name="Intro", type="cue", position_ms=0.0, hotcue=0),
+            ],
+        )
+        blob = build_full_trmd(track)
+        root = parse_trmd(blob)
+        data = find_chunk(root, "DATA")
+
+        fourccs = [c.fourcc for c in data.children]
+
+        # Chunks critiques
+        assert "HBPM" in fourccs
+        assert "MKEY" in fourccs
+        assert "TKEY" in fourccs
+        assert "TIT2" in fourccs
+        assert "TPE1" in fourccs
+        assert "TALB" in fourccs
+        assert "LABL" in fourccs
+        assert "TLEN" in fourccs
+        assert "BITR" in fourccs
+        assert "CUEP" in fourccs
+        assert "FLGS" in fourccs
+        assert "AUID" in fourccs
+        assert "TRN3" in fourccs
+
+    def test_flgs_is_0x1c(self) -> None:
+        """FLGS = 0x1C pour empecher le rescan destructif de Traktor."""
+        track = Track(title="T", bpm=120.0)
+        blob = build_full_trmd(track)
+        root = parse_trmd(blob)
+        flgs = find_chunk(root, "DATA/FLGS")
+        assert flgs is not None
+        val = struct.unpack("<I", flgs.data)[0]
+        assert val == 0x1C
+
+    def test_hbpm_is_float32(self) -> None:
+        track = Track(bpm=138.5)
+        blob = build_full_trmd(track)
+        root = parse_trmd(blob)
+        hbpm = find_chunk(root, "DATA/HBPM")
+        val = struct.unpack("<f", hbpm.data)[0]
+        assert abs(val - 138.5) < 0.001
+
+    def test_mkey_matches_classical_key(self) -> None:
+        """Am = index 21 dans la table Traktor."""
+        track = Track(key="Am")
+        blob = build_full_trmd(track)
+        root = parse_trmd(blob)
+        mkey = find_chunk(root, "DATA/MKEY")
+        val = struct.unpack("<I", mkey.data)[0]
+        assert val == 21
+
+    def test_cues_preserved(self) -> None:
+        """Les cues Rekordbox sont preserves dans CUEP."""
+        track = Track(
+            grid_offset_ms=50.0,
+            cue_points=[
+                CuePoint(name="A", type="cue", position_ms=1000.0, hotcue=0),
+                CuePoint(name="B", type="cue", position_ms=2000.0, hotcue=1),
+            ],
+        )
+        blob = build_full_trmd(track)
+        root = parse_trmd(blob)
+        cuep = find_chunk(root, "DATA/CUEP")
+        cues = parse_cuep_body(cuep.data)
+        assert len(cues) == 3  # grid + 2 cues
+        assert cues[0]["name"] == "AutoGrid"
+        assert cues[1]["position_ms"] == 1000.0
+        assert cues[2]["position_ms"] == 2000.0

@@ -91,7 +91,7 @@ def _pick_folder_macos() -> Optional[str]:
 # Conversion
 # ----------------------------------------------------------------------------
 
-def _run_conversion(xml_path: str, traktor_dir: Path, inject_art: bool) -> None:
+def _run_conversion(xml_path: str, traktor_dir: Path, inject_metadata: bool) -> None:
     """Execute la conversion avec affichage Rich."""
     from traktord.parsers.rekordbox import RekordboxParser
     from traktord.converters.traktor import TraktorWriter
@@ -114,16 +114,16 @@ def _run_conversion(xml_path: str, traktor_dir: Path, inject_art: bool) -> None:
     writer.write(collection, str(nml_path))
     console.print(f"  [green]OK[/] {nml_path}")
 
-    # Etape 3 : Artworks
-    if inject_art:
-        from traktord.utils.trmd import inject_artwork
+    # Etape 3 : Injection metadonnees completes dans les MP3
+    injected = 0
+    skipped = 0
+    if inject_metadata:
+        from traktord.utils.trmd import inject_full_metadata
         coverart_dir = traktor_dir / "Coverart"
         coverart_dir.mkdir(exist_ok=True)
 
-        injected = 0
-        skipped = 0
-
-        console.print("[cyan]Injection des artworks...[/]")
+        console.print("[cyan]Injection metadonnees completes dans les MP3...[/]")
+        console.print("[dim]  (PRIV:TRAKTOR4 + COMM + POPM + artworks)[/]")
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -131,32 +131,32 @@ def _run_conversion(xml_path: str, traktor_dir: Path, inject_art: bool) -> None:
             MofNCompleteColumn(),
             console=console,
         ) as progress:
-            task = progress.add_task("Artworks", total=total)
+            task = progress.add_task("Tracks", total=total)
 
             for track in collection.tracks:
                 mp3 = Path(track.file_path)
                 if mp3.exists() and mp3.suffix.lower() == ".mp3":
                     try:
-                        result = inject_artwork(mp3, coverart_dir)
-                        if result:
-                            injected += 1
-                        else:
-                            skipped += 1
+                        inject_full_metadata(mp3, track, coverart_dir)
+                        injected += 1
                     except Exception:
                         skipped += 1
                 else:
                     skipped += 1
                 progress.advance(task)
 
-        console.print(f"  [green]{injected}[/] artworks injectes, {skipped} ignores")
+        console.print(f"  [green]{injected}[/] MP3 injectes, {skipped} ignores")
 
     # Resume final
+    summary = f"[bold green]{total}[/bold green] tracks converties\n"
+    if inject_metadata:
+        summary += f"[bold green]{injected}[/bold green] MP3 enrichis (PRIV + COMM + POPM)\n"
+    summary += f"\nFichier : [cyan]{nml_path}[/]"
+    if backup:
+        summary += f"\nBackup  : [dim]{backup.name}[/]"
     console.print()
     console.print(Panel(
-        f"[bold green]{total}[/bold green] tracks converties\n"
-        + (f"[bold green]{injected}[/bold green] artworks injectes\n" if inject_art else "")
-        + f"\nFichier : [cyan]{nml_path}[/]"
-        + (f"\nBackup  : [dim]{backup.name}[/]" if backup else ""),
+        summary,
         title="[bold green]Conversion terminee[/]",
         border_style="green",
     ))
@@ -216,8 +216,9 @@ def main() -> None:
     console.print(f"   [green]\u2713[/] {traktor_dir}")
 
     # Etape 3 : Options
-    inject_art = Confirm.ask(
-        "\n[bold]3.[/] Injecter les artworks (pochettes) dans les MP3 ?",
+    inject_metadata = Confirm.ask(
+        "\n[bold]3.[/] Injecter les metadonnees completes dans les MP3 "
+        "(cues, BPM, key, artworks, commentaires, rating) ?",
         default=True,
     )
 
@@ -226,7 +227,7 @@ def main() -> None:
     console.print(Panel(
         f"Source   : [cyan]{xml_path}[/]\n"
         f"Traktor  : [cyan]{traktor_dir}[/]\n"
-        f"Artworks : {'[green]Oui[/]' if inject_art else '[dim]Non[/]'}",
+        f"Metadonnees MP3 : {'[green]Oui[/]' if inject_metadata else '[dim]Non[/]'}",
         title="[bold]Recapitulatif[/]",
         border_style="cyan",
     ))
@@ -236,7 +237,7 @@ def main() -> None:
         sys.exit(0)
 
     # Go
-    _run_conversion(xml_path, traktor_dir, inject_art)
+    _run_conversion(xml_path, traktor_dir, inject_metadata)
 
 
 if __name__ == "__main__":
