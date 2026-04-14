@@ -29,8 +29,16 @@ _CUE_TYPE_TO_NML: dict[str, str] = {
 }
 
 
-def _build_entry(track: Track, volume_name: str | None = None) -> etree._Element:
+def _build_entry(
+    track: Track,
+    volume_name: str | None = None,
+    include_cues: bool = True,
+) -> etree._Element:
     """Construire un element <ENTRY> NML depuis un Track.
+
+    Args:
+        include_cues: Si False, omet les CUE_V2 (pour Phase 1 import initial
+            ou Traktor analyse d'abord avant qu'on merge les cues).
 
     Structure Traktor :
     <ENTRY MODIFIED_DATE="2019/10/19" MODIFIED_TIME="13047" TITLE="..." ARTIST="...">
@@ -115,26 +123,27 @@ def _build_entry(track: Track, volume_name: str | None = None) -> etree._Element
             key_elem = etree.SubElement(entry, "MUSICAL_KEY")
             key_elem.set("VALUE", str(key_value))
 
-    # CUE_V2 — d'abord le beatgrid, puis les cues
-    if track.grid_offset_ms is not None and track.bpm:
-        grid_cue = etree.SubElement(entry, "CUE_V2")
-        grid_cue.set("NAME", "AutoGrid")
-        grid_cue.set("DISPL_ORDER", "0")
-        grid_cue.set("TYPE", "4")
-        grid_cue.set("START", f"{track.grid_offset_ms:.6f}")
-        grid_cue.set("LEN", "0.000000")
-        grid_cue.set("REPEATS", "-1")
-        grid_cue.set("HOTCUE", "-1")
+    # CUE_V2 — d'abord le beatgrid, puis les cues (Phase 2 uniquement)
+    if include_cues:
+        if track.grid_offset_ms is not None and track.bpm:
+            grid_cue = etree.SubElement(entry, "CUE_V2")
+            grid_cue.set("NAME", "AutoGrid")
+            grid_cue.set("DISPL_ORDER", "0")
+            grid_cue.set("TYPE", "4")
+            grid_cue.set("START", f"{track.grid_offset_ms:.6f}")
+            grid_cue.set("LEN", "0.000000")
+            grid_cue.set("REPEATS", "-1")
+            grid_cue.set("HOTCUE", "-1")
 
-    for i, cue in enumerate(track.cue_points):
-        cue_elem = etree.SubElement(entry, "CUE_V2")
-        cue_elem.set("NAME", cue.name or "")
-        cue_elem.set("DISPL_ORDER", str(i))
-        cue_elem.set("TYPE", _CUE_TYPE_TO_NML.get(cue.type, "0"))
-        cue_elem.set("START", f"{cue.position_ms:.6f}")
-        cue_elem.set("LEN", f"{cue.length_ms:.6f}")
-        cue_elem.set("REPEATS", "-1")
-        cue_elem.set("HOTCUE", str(cue.hotcue))
+        for i, cue in enumerate(track.cue_points):
+            cue_elem = etree.SubElement(entry, "CUE_V2")
+            cue_elem.set("NAME", cue.name or "")
+            cue_elem.set("DISPL_ORDER", str(i))
+            cue_elem.set("TYPE", _CUE_TYPE_TO_NML.get(cue.type, "0"))
+            cue_elem.set("START", f"{cue.position_ms:.6f}")
+            cue_elem.set("LEN", f"{cue.length_ms:.6f}")
+            cue_elem.set("REPEATS", "-1")
+            cue_elem.set("HOTCUE", str(cue.hotcue))
 
     return entry
 
@@ -250,8 +259,14 @@ class TraktorWriter:
         collection: Collection,
         output_path: str,
         volume_name: str | None = None,
+        include_cues: bool = True,
     ) -> None:
-        """Ecrire une Collection vers un fichier NML Traktor."""
+        """Ecrire une Collection vers un fichier NML Traktor.
+
+        Args:
+            include_cues: Si False, omet les CUE_V2 (Phase 1). Traktor fera
+                son analyse propre, puis merge-cues ajoutera les cues en Phase 2.
+        """
         root = etree.Element("NML")
         root.set("VERSION", "19")
 
@@ -269,7 +284,7 @@ class TraktorWriter:
 
         path_to_track: dict[str, Track] = {}
         for track in collection.tracks:
-            entry = _build_entry(track, volume_name=volume_name)
+            entry = _build_entry(track, volume_name=volume_name, include_cues=include_cues)
             collection_elem.append(entry)
             path_to_track[track.file_path] = track
 

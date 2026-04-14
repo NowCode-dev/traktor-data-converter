@@ -1,7 +1,8 @@
 """Interface interactive Traktor Data Converter.
 
-Assistant en terminal avec Rich + dialogues fichiers natifs macOS.
-Fonctionne sur toutes les versions de macOS sans probleme de rendu.
+Approche 2 phases :
+- Phase 1 : Import NML basique (sans cues) + artworks → Traktor analyse
+- Phase 2 : Merge des cues Rekordbox dans la collection.nml apres analyse
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from typing import Optional
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, MofNCompleteColumn
-from rich.prompt import Confirm
+from rich.prompt import Confirm, Prompt
 
 console = Console()
 
@@ -48,11 +49,10 @@ def _backup_collection(traktor_dir: Path) -> Optional[Path]:
 
 
 # ----------------------------------------------------------------------------
-# Dialogue fichier natif macOS (via osascript)
+# Dialogues natifs macOS (via osascript)
 # ----------------------------------------------------------------------------
 
 def _pick_file_macos() -> Optional[str]:
-    """Ouvre un dialogue natif macOS pour choisir un fichier XML."""
     try:
         result = subprocess.run(
             [
@@ -70,7 +70,6 @@ def _pick_file_macos() -> Optional[str]:
 
 
 def _pick_folder_macos() -> Optional[str]:
-    """Ouvre un dialogue natif macOS pour choisir un dossier."""
     try:
         result = subprocess.run(
             [
@@ -88,42 +87,44 @@ def _pick_folder_macos() -> Optional[str]:
 
 
 # ----------------------------------------------------------------------------
-# Conversion
+# Phase 1 : Import initial (NML sans cues + artworks)
 # ----------------------------------------------------------------------------
 
-def _run_conversion(xml_path: str, traktor_dir: Path, inject_metadata: bool) -> None:
-    """Execute la conversion avec affichage Rich."""
+def _run_phase1(xml_path: str, traktor_dir: Path, inject_artworks: bool) -> None:
+    """Phase 1 : NML sans cues + artwork pour que Traktor analyse."""
     from traktord.parsers.rekordbox import RekordboxParser
     from traktord.converters.traktor import TraktorWriter
 
-    # Etape 1 : Parser
-    console.print("\n[cyan]Lecture de l'export Rekordbox...[/]")
+    console.print("\n[cyan]Phase 1/2 — Import initial[/]\n")
+
+    # Parser
+    console.print("[cyan]Lecture de l'export Rekordbox...[/]")
     parser = RekordboxParser()
     collection = parser.parse(xml_path)
     total = len(collection.tracks)
     console.print(f"  [green]{total}[/] tracks chargees")
 
-    # Etape 2 : Backup + NML
+    # Backup + ecriture NML sans cues
     backup = _backup_collection(traktor_dir)
     if backup:
         console.print(f"  Backup : [dim]{backup.name}[/]")
 
     nml_path = traktor_dir / "collection.nml"
-    console.print("[cyan]Ecriture du fichier Traktor...[/]")
+    console.print("[cyan]Ecriture du NML (sans cues pour Phase 1)...[/]")
     writer = TraktorWriter()
-    writer.write(collection, str(nml_path))
+    writer.write(collection, str(nml_path), include_cues=False)
     console.print(f"  [green]OK[/] {nml_path}")
 
-    # Etape 3 : Injection metadonnees completes dans les MP3
-    injected = 0
-    skipped = 0
-    if inject_metadata:
-        from traktord.utils.trmd import inject_full_metadata
+    # Injection artworks (PRIV:TRAKTOR4 minimal + cache files)
+    if inject_artworks:
+        from traktord.utils.trmd import inject_artwork
         coverart_dir = traktor_dir / "Coverart"
         coverart_dir.mkdir(exist_ok=True)
 
-        console.print("[cyan]Injection metadonnees completes dans les MP3...[/]")
-        console.print("[dim]  (PRIV:TRAKTOR4 + COMM + POPM + artworks)[/]")
+        injected = 0
+        skipped = 0
+
+        console.print("[cyan]Injection des artworks...[/]")
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -131,33 +132,84 @@ def _run_conversion(xml_path: str, traktor_dir: Path, inject_metadata: bool) -> 
             MofNCompleteColumn(),
             console=console,
         ) as progress:
-            task = progress.add_task("Tracks", total=total)
+            task = progress.add_task("Artworks", total=total)
 
             for track in collection.tracks:
                 mp3 = Path(track.file_path)
                 if mp3.exists() and mp3.suffix.lower() == ".mp3":
                     try:
-                        inject_full_metadata(mp3, track, coverart_dir)
-                        injected += 1
+                        result = inject_artwork(mp3, coverart_dir)
+                        if result:
+                            injected += 1
+                        else:
+                            skipped += 1
                     except Exception:
                         skipped += 1
                 else:
                     skipped += 1
                 progress.advance(task)
 
-        console.print(f"  [green]{injected}[/] MP3 injectes, {skipped} ignores")
+        console.print(f"  [green]{injected}[/] artworks injectes, {skipped} ignores")
 
-    # Resume final
-    summary = f"[bold green]{total}[/bold green] tracks converties\n"
-    if inject_metadata:
-        summary += f"[bold green]{injected}[/bold green] MP3 enrichis (PRIV + COMM + POPM)\n"
-    summary += f"\nFichier : [cyan]{nml_path}[/]"
-    if backup:
-        summary += f"\nBackup  : [dim]{backup.name}[/]"
+    # Instructions Phase 2
     console.print()
     console.print(Panel(
-        summary,
-        title="[bold green]Conversion terminee[/]",
+        "[bold]Phase 1 terminee ![/]\n\n"
+        f"[cyan]Tracks importees :[/] {total}\n"
+        f"[cyan]NML ecrit :[/] [dim]{nml_path}[/]\n\n"
+        "[bold yellow]Prochaine etape :[/]\n"
+        "1. Ouvre [cyan]Traktor Pro 4[/]\n"
+        "2. Traktor va analyser les tracks (BPM, key, beatgrid, transients)\n"
+        "3. Attends la fin de l'analyse (peut prendre plusieurs heures)\n"
+        "4. Quand c'est fini, ferme Traktor\n"
+        "5. Relance cet outil et choisis [cyan]Phase 2 — Merge des cues[/]",
+        title="[bold green]Phase 1 OK[/]",
+        border_style="green",
+    ))
+
+
+# ----------------------------------------------------------------------------
+# Phase 2 : Merge des cues
+# ----------------------------------------------------------------------------
+
+def _run_phase2(xml_path: str, traktor_dir: Path) -> None:
+    """Phase 2 : Merge les cues Rekordbox dans la collection.nml analysee."""
+    from traktord.parsers.rekordbox import RekordboxParser
+    from traktord.merge_cues import merge_cues
+
+    console.print("\n[cyan]Phase 2/2 — Merge des cues[/]\n")
+
+    # Parser l'XML Rekordbox pour les cues
+    console.print("[cyan]Lecture des cues Rekordbox...[/]")
+    parser = RekordboxParser()
+    collection = parser.parse(xml_path)
+    total = len(collection.tracks)
+    total_cues = sum(len(t.cue_points) for t in collection.tracks)
+    console.print(f"  [green]{total}[/] tracks, {total_cues} cues")
+
+    # Merge
+    nml_path = traktor_dir / "collection.nml"
+    console.print(f"[cyan]Merge dans {nml_path}...[/]")
+
+    stats = merge_cues(
+        collection,
+        nml_path,
+        overwrite_existing_cues=True,
+        overwrite_grid=False,  # Garder le grid de Traktor (meilleur)
+    )
+
+    # Resume
+    console.print()
+    console.print(Panel(
+        f"[cyan]Tracks matchees :[/] [green]{stats['matched']}[/]\n"
+        f"[cyan]Tracks non trouvees :[/] {stats['not_matched']}\n"
+        f"[cyan]Cues ajoutes :[/] [green]{stats['total_cues_added']}[/]\n\n"
+        f"[cyan]Backup :[/] [dim]{stats['backup'].name}[/]\n"
+        f"[cyan]NML :[/] [dim]{nml_path}[/]\n\n"
+        "[bold yellow]Prochaine etape :[/]\n"
+        "Relance Traktor. Tes cues Rekordbox sont maintenant integres\n"
+        "avec l'analyse Traktor. Ils ne devraient plus etre ecrases au rescan.",
+        title="[bold green]Phase 2 OK[/]",
         border_style="green",
     ))
 
@@ -167,20 +219,28 @@ def _run_conversion(xml_path: str, traktor_dir: Path, inject_metadata: bool) -> 
 # ----------------------------------------------------------------------------
 
 def main() -> None:
-    """Point d'entree de l'interface interactive."""
+    """Point d'entree interactif."""
 
-    # Banniere
     console.print()
     console.print(Panel(
         "[bold cyan]Traktor Data Converter[/]\n"
         "[dim]Rekordbox  \u2192  Traktor Pro 4[/]\n\n"
+        "[dim]Migration en 2 phases :[/]\n"
+        "[dim]1. Import NML + artworks → Traktor analyse[/]\n"
+        "[dim]2. Merge des cues dans la collection analysee[/]\n\n"
         "[dim]NowCode Sarl — nowcode.ch[/]",
         border_style="cyan",
         padding=(1, 4),
     ))
 
-    # Etape 1 : Choisir le fichier Rekordbox
-    console.print("\n[bold]1.[/] Selectionner l'export Rekordbox (.xml)")
+    # Choix de phase
+    console.print("\n[bold]Quelle phase veux-tu lancer ?[/]")
+    console.print("  [cyan]1[/] — Phase 1 : Import initial (NML + artworks)")
+    console.print("  [cyan]2[/] — Phase 2 : Merge des cues (apres analyse Traktor)")
+    phase = Prompt.ask("Phase", choices=["1", "2"], default="1")
+
+    # Selection du fichier Rekordbox
+    console.print("\n[bold]Selectionner l'export Rekordbox (.xml)[/]")
     console.print("   [dim]Une fenetre de selection va s'ouvrir...[/]")
     xml_path = _pick_file_macos()
 
@@ -190,54 +250,54 @@ def main() -> None:
 
     console.print(f"   [green]\u2713[/] {xml_path}")
 
-    # Etape 2 : Dossier Traktor
+    # Dossier Traktor
     traktor_dir = _find_traktor4_dir()
     if traktor_dir:
-        console.print(f"\n[bold]2.[/] Dossier Traktor 4 detecte :")
-        console.print(f"   [cyan]{traktor_dir}[/]")
-        if not Confirm.ask("   Utiliser ce dossier ?", default=True):
-            console.print("   [dim]Selectionner le bon dossier...[/]")
+        console.print(f"\n[bold]Dossier Traktor 4 detecte :[/] [cyan]{traktor_dir}[/]")
+        if not Confirm.ask("Utiliser ce dossier ?", default=True):
             folder = _pick_folder_macos()
             if folder:
                 traktor_dir = Path(folder)
             else:
-                console.print("   [red]Aucun dossier selectionne. Abandon.[/]")
+                console.print("[red]Abandon.[/]")
                 sys.exit(1)
     else:
-        console.print("\n[bold]2.[/] Dossier Traktor 4 non detecte.")
-        console.print("   [dim]Selectionner le dossier manuellement...[/]")
+        console.print("\n[bold]Dossier Traktor 4 non detecte.[/]")
         folder = _pick_folder_macos()
         if folder:
             traktor_dir = Path(folder)
         else:
-            console.print("   [red]Aucun dossier selectionne. Abandon.[/]")
+            console.print("[red]Abandon.[/]")
             sys.exit(1)
 
-    console.print(f"   [green]\u2713[/] {traktor_dir}")
+    # Lancer la phase choisie
+    if phase == "1":
+        inject_art = Confirm.ask(
+            "\nInjecter les artworks (pochettes) ?",
+            default=True,
+        )
+        if not Confirm.ask("Lancer la Phase 1 ?", default=True):
+            sys.exit(0)
+        _run_phase1(xml_path, traktor_dir, inject_art)
+    else:
+        nml_path = traktor_dir / "collection.nml"
+        if not nml_path.exists():
+            console.print(f"[red]collection.nml introuvable dans {traktor_dir}[/]")
+            console.print("[yellow]Lance d'abord la Phase 1 et l'analyse Traktor.[/]")
+            sys.exit(1)
 
-    # Etape 3 : Options
-    inject_metadata = Confirm.ask(
-        "\n[bold]3.[/] Injecter les metadonnees completes dans les MP3 "
-        "(cues, BPM, key, artworks, commentaires, rating) ?",
-        default=True,
-    )
-
-    # Resume avant conversion
-    console.print()
-    console.print(Panel(
-        f"Source   : [cyan]{xml_path}[/]\n"
-        f"Traktor  : [cyan]{traktor_dir}[/]\n"
-        f"Metadonnees MP3 : {'[green]Oui[/]' if inject_metadata else '[dim]Non[/]'}",
-        title="[bold]Recapitulatif[/]",
-        border_style="cyan",
-    ))
-
-    if not Confirm.ask("Lancer la conversion ?", default=True):
-        console.print("[dim]Abandon.[/]")
-        sys.exit(0)
-
-    # Go
-    _run_conversion(xml_path, traktor_dir, inject_metadata)
+        console.print()
+        console.print(Panel(
+            "[yellow]As-tu bien :[/]\n"
+            "1. Lance la Phase 1 ?\n"
+            "2. Ouvert Traktor ?\n"
+            "3. Attendu la fin de l'analyse (BPM, key, beatgrid) ?\n"
+            "4. Ferme Traktor ?",
+            border_style="yellow",
+        ))
+        if not Confirm.ask("Lancer la Phase 2 ?", default=True):
+            sys.exit(0)
+        _run_phase2(xml_path, traktor_dir)
 
 
 if __name__ == "__main__":

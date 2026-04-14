@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import click
@@ -269,6 +270,171 @@ def info(source: str):
         console.print(f"\n[bold]Playlists :[/]")
         for name, paths in collection.playlists.items():
             console.print(f"  {name} ({len(paths)} tracks)")
+
+
+@cli.command()
+@click.argument("source", type=click.Path(exists=True))
+@click.option("--traktor-dir", type=click.Path(), default=None,
+              help="Dossier Traktor 4 (auto-detecte par defaut).")
+@click.option("--no-artwork", is_flag=True, default=False,
+              help="Ne pas injecter les artworks (plus rapide).")
+def init(source: str, traktor_dir: str | None, no_artwork: bool):
+    """Phase 1 : Import NML initial (sans cues) + artworks.
+
+    Ecrit un collection.nml sans cue points. Ouvre ensuite Traktor qui
+    va analyser tous les tracks (BPM, key, beatgrid, transients). Une
+    fois l'analyse terminee, lance 'merge-cues' pour ajouter les cues.
+    """
+    from traktord.parsers.rekordbox import RekordboxParser
+    from traktord.converters.traktor import TraktorWriter
+
+    console.print(f"[bold blue]Traktor Data Converter v{__version__} — Phase 1[/]\n")
+
+    # Dossier Traktor
+    if traktor_dir:
+        tdir = Path(traktor_dir)
+    else:
+        from traktord.merge_cues import find_traktor_collection_nml
+        nml = find_traktor_collection_nml()
+        tdir = nml.parent if nml else None
+
+    if not tdir or not tdir.exists():
+        raise click.ClickException(
+            "Dossier Traktor 4 introuvable. Utilisez --traktor-dir."
+        )
+
+    console.print(f"Traktor : [cyan]{tdir}[/]")
+
+    # Parser
+    console.print(f"Lecture de [cyan]{source}[/]...")
+    parser = RekordboxParser()
+    collection = parser.parse(source)
+    total = len(collection.tracks)
+    console.print(f"  [green]{total}[/] tracks chargees")
+
+    # Backup
+    nml_path = tdir / "collection.nml"
+    if nml_path.exists():
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_dir = tdir / "Backup"
+        backup_dir.mkdir(exist_ok=True)
+        backup = backup_dir / f"collection_{timestamp}.nml"
+        import shutil as _sh
+        _sh.copy2(nml_path, backup)
+        console.print(f"  Backup : [dim]{backup.name}[/]")
+
+    # Ecriture NML sans cues
+    console.print("[cyan]Ecriture du NML (sans cues)...[/]")
+    writer = TraktorWriter()
+    writer.write(collection, str(nml_path), include_cues=False)
+    console.print(f"  [green]OK[/] {nml_path}")
+
+    # Artworks
+    if not no_artwork:
+        _inject_artworks_phase1(collection)
+
+    console.print()
+    console.print("[bold green]Phase 1 terminee ![/]")
+    console.print("\n[yellow]Prochaine etape :[/]")
+    console.print("  1. Ouvre [cyan]Traktor Pro 4[/]")
+    console.print("  2. Attends la fin de l'analyse (plusieurs heures possibles)")
+    console.print("  3. Ferme Traktor")
+    console.print(f"  4. Lance : [cyan]traktor-convert merge-cues {source}[/]")
+
+
+def _inject_artworks_phase1(collection) -> None:
+    """Injection artwork seule (pour Phase 1)."""
+    from traktord.utils.trmd import inject_artwork
+
+    coverart_dir = _find_traktor4_coverart_dir()
+
+    console.print("[cyan]Injection des artworks...[/]")
+    injected = 0
+    skipped = 0
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Artworks", total=len(collection.tracks))
+
+        for track in collection.tracks:
+            mp3 = Path(track.file_path)
+            if mp3.exists() and mp3.suffix.lower() == ".mp3":
+                try:
+                    result = inject_artwork(mp3, coverart_dir)
+                    if result:
+                        injected += 1
+                    else:
+                        skipped += 1
+                except Exception:
+                    skipped += 1
+            else:
+                skipped += 1
+            progress.advance(task)
+
+    console.print(f"  [green]{injected}[/] injectes, {skipped} ignores")
+
+
+@cli.command("merge-cues")
+@click.argument("source", type=click.Path(exists=True))
+@click.option("--traktor-dir", type=click.Path(), default=None,
+              help="Dossier Traktor 4 (auto-detecte par defaut).")
+@click.option("--keep-grid/--overwrite-grid", default=True,
+              help="Garder le beatgrid de Traktor (recommande) ou reecrire avec Rekordbox.")
+def merge_cues_cmd(source: str, traktor_dir: str | None, keep_grid: bool):
+    """Phase 2 : Merge les cues Rekordbox dans la collection.nml analysee.
+
+    A lancer APRES avoir fait 'init' et attendu que Traktor finisse son
+    analyse (BPM, key, beatgrid). Ajoute les CUE_V2 Rekordbox dans la
+    collection.nml sans toucher aux autres donnees.
+    """
+    from traktord.parsers.rekordbox import RekordboxParser
+    from traktord.merge_cues import find_traktor_collection_nml, merge_cues
+
+    console.print(f"[bold blue]Traktor Data Converter v{__version__} — Phase 2[/]\n")
+
+    # Trouver collection.nml
+    if traktor_dir:
+        nml_path = Path(traktor_dir) / "collection.nml"
+    else:
+        nml_path = find_traktor_collection_nml()
+
+    if not nml_path or not nml_path.exists():
+        raise click.ClickException(
+            "collection.nml Traktor introuvable. Utilisez --traktor-dir."
+        )
+
+    console.print(f"collection.nml : [cyan]{nml_path}[/]")
+
+    # Parser Rekordbox pour les cues
+    console.print(f"Lecture des cues depuis [cyan]{source}[/]...")
+    parser = RekordboxParser()
+    collection = parser.parse(source)
+    total = len(collection.tracks)
+    total_cues = sum(len(t.cue_points) for t in collection.tracks)
+    console.print(f"  [green]{total}[/] tracks, [green]{total_cues}[/] cues")
+
+    # Merge
+    console.print("[cyan]Merge en cours...[/]")
+    stats = merge_cues(
+        collection,
+        nml_path,
+        overwrite_existing_cues=True,
+        overwrite_grid=not keep_grid,
+    )
+
+    console.print()
+    console.print(f"  [green]Matchees     :[/] {stats['matched']}")
+    console.print(f"  [dim]Non trouvees  :[/] {stats['not_matched']}")
+    console.print(f"  [green]Cues ajoutes :[/] {stats['total_cues_added']}")
+    console.print(f"  Backup       : [dim]{stats['backup'].name}[/]")
+    console.print()
+    console.print("[bold green]Phase 2 terminee ![/]")
+    console.print("\n[yellow]Relance Traktor[/] — les cues sont maintenant integres.")
 
 
 if __name__ == "__main__":
