@@ -1,133 +1,120 @@
-# Handoff — Traktor Data Converter (session 2026-04-12)
+# Handoff — Traktor Data Converter (fin session 2026-04-14)
 
 > Ce fichier contient tout le contexte pour reprendre le travail dans
 > une nouvelle session Claude Code. Lis-le en premier.
 
-## Objectif
+## Etat actuel
 
-Migrer une bibliotheque Rekordbox (5510 tracks) vers Traktor Pro 4
-en preservant TOUTES les metadonnees : cues, BPM, key, commentaires,
-rating, artworks.
+**Lorys a lance la Phase 1 sur son MacBook.** Traktor analyse sa
+bibliotheque de 5510 tracks (~2-3h). La Phase 2 (merge des cues)
+sera lancee a la prochaine session, demain (2026-04-15).
 
-## Architecture Traktor 4 (decouverte cle)
+## Objectif final
 
-**Traktor 4 ne lit plus le NML pour les metadonnees.** Tout est dans
-une frame ID3 proprietaire `PRIV:TRAKTOR4` stockee dans chaque MP3.
-Le NML v20 est secondaire — quand Traktor rescanne un fichier, il
-lit le PRIV et ecrase le NML.
+Migrer la bibliotheque Rekordbox (5510 tracks) vers Traktor Pro 4
+en preservant : artworks, cues, BPM, key, commentaires, rating.
 
-**Consequence : il faut injecter les metadonnees dans le PRIV de
-chaque MP3, pas seulement dans le NML.**
+## Approche retenue : 2 phases
 
-## Ce qui est fait
+### Phase 1 — Import initial (faite)
+- Genere un NML avec metadonnees de base (titre, artiste, album, BPM,
+  key, commentaire, rating) **sans cue points**
+- Injecte le PRIV:TRAKTOR4 minimal (artwork seul) + cache Coverart
+- Utilisateur ouvre Traktor → analyse complete automatique
+- Traktor genere ses propres AUID/TRN3/CHKS valides
 
-### Serialiseur TRMD (complet)
-`src/traktord/utils/trmd.py` :
-- `Chunk` dataclass + `serialize()` recursif
-- `parse_trmd()` / `parse_chunk()` — roundtrip bit-perfect verifie
-- `build_artw_body()` / `parse_artw_body()` — artwork complet
-- `generate_coverid()` — ID deterministe SHA-256 + NI Base32
-- `build_minimal_trmd()` — TRMD avec HDR_ v3 + DATA v20 + ARTW
-- `inject_artwork()` — injection PRIV:TRAKTOR4 + cache files
-- `read_artwork()` — lecture PRIV existante
+Commande : `traktor-convert init export.xml`
 
-### Module coverart (complet)
-`src/traktord/utils/coverart.py` :
-- Base32 NI, encode/decode cache, 3 resolutions, write cache files
+### Phase 2 — Merge des cues (a faire demain)
+- Parse l'XML Rekordbox pour les cues
+- Lit la collection.nml Traktor apres analyse
+- Match par filename, ajoute les `CUE_V2` dans les entrees existantes
+- **Garde le beatgrid de Traktor** (option `--keep-grid` par defaut)
+- Ecrit la collection.nml mise a jour + backup automatique
 
-### Tests (49 verts)
-- `tests/test_coverart.py` — 19 tests
-- `tests/test_trmd.py` — 30 tests (dont roundtrip sur vrais Factory Sounds)
+Commande : `traktor-convert merge-cues export.xml`
 
-### NML Writer (complet)
-`src/traktord/converters/traktor.py` — genere NML correct
+## Commandes a faire demain
 
-### CLI + GUI
-- `src/traktord/cli.py` — CLI Click avec `--artwork`
-- `src/traktord/gui.py` — assistant terminal Rich + dialogues natifs macOS
-- Publie sur GitHub : `NowCode-dev/traktor-data-converter` (public)
-- Installe et teste sur MacBook Pro 2018 (Ventura 13.2.1)
+Sur le MacBook, une fois l'analyse Traktor terminee et Traktor ferme :
 
-### Validation
-- Artworks affiches dans Traktor Pro 4 ✓ (confirme par screenshot)
-- Mais metadonnees perdues au rescan (commentaires, rating, cues)
+```bash
+pip3 install --user --force-reinstall git+https://github.com/NowCode-dev/traktor-data-converter.git
+python3 -m traktord.gui
+# Choisir "2"
+# Selectionner le meme export.xml
+# Confirmer
 
-## Ce qui reste a faire (priorite haute)
-
-### Enrichir le PRIV:TRAKTOR4 avec les metadonnees
-
-Modifier `build_minimal_trmd()` → `build_full_trmd()` qui inclut :
-
-| Chunk | Format | Source Rekordbox | Priorite |
-|---|---|---|---|
-| HBPM | float32 LE | track.bpm | Haute |
-| BPMQ | float32 LE (100.0) | fixe | Haute |
-| MKEY | int32 LE | track.key (converti) | Haute |
-| TKEY | UTF-16 LE (strlen + data) | track.key (string) | Haute |
-| CUEP | binaire variable | track.cue_points | Haute |
-| TIT2 | UTF-16 LE (strlen + data) | track.title | Haute |
-| TPE1 | UTF-16 LE (strlen + data) | track.artist | Haute |
-| TALB | UTF-16 LE (strlen + data) | track.album | Moyenne |
-| TLEN | int32 LE (ms) | track.duration | Moyenne |
-| BITR | int32 LE | track.bitrate | Moyenne |
-| FLGS | int32 LE | flags standard | Basse |
-| IPDT | int32 LE (timestamp) | date import | Basse |
-
-### Methode recommandee
-
-1. **Analyser les chunks existants** des Factory Sounds pour comprendre
-   le format exact de chaque chunk (surtout CUEP et les strings UTF-16)
-2. **Coder les builders** pour chaque chunk
-3. **Tester sur la copie** du disque externe (PAS les originaux)
-4. **Verifier dans Traktor** que les metadonnees survivent au rescan
-
-### Format des strings dans TRMD (observe)
-
-Les chunks texte (TIT2, TPE1, TALB, TKEY, LMDT) utilisent :
-```
-bytes 0-3 : uint32 LE = longueur en caracteres
-bytes 4-N : UTF-16 LE (strlen * 2 bytes)
+# Ou en CLI directe :
+traktor-convert merge-cues /chemin/vers/export.xml
 ```
 
-### Format CUEP (a reverser)
+Puis rouvrir Traktor et verifier :
+- Les 4 cues Rekordbox apparaissent bien sur les pads A/B/C/D
+- Le beatgrid est correct (celui de Traktor)
+- Les commentaires, rating, artwork restent
+- **Charger un track dans un deck** → les cues ne disparaissent plus
 
-Le chunk CUEP fait 52-396 bytes dans les Factory Sounds.
-Il faut reverser le format exact (probablement une liste de cue points
-avec type, position, longueur, nom, couleur).
+## Pourquoi cette approche
 
-## Donnees de reference
+### Ce qu'on a essaye et qui echoue
+1. **Injection PRIV:TRAKTOR4 minimal (artwork seul)** : artwork OK mais
+   tout le reste du NML est efface au rescan
+2. **Injection PRIV:TRAKTOR4 complet** (HBPM, CUEP, MKEY, etc.) : meme
+   avec FLGS=0x1C, Traktor re-analyse et efface
+3. **Copie bit-perfect d'un PRIV Factory Sounds reel** dans un MP3
+   Beatport : Traktor ignore completement le PRIV, affiche les tags
+   ID3 originaux du MP3. Traktor valide probablement le PRIV contre
+   l'audio du fichier (hash/fingerprint).
 
-### Vrais fichiers avec PRIV:TRAKTOR4 complet
-```
-/Library/Application Support/Native Instruments/Traktor Pro 4/Factory Sounds/*.mp3
-```
-→ Contiennent tous les chunks (CUEP, HBPM, MKEY, etc.)
-→ Utiliser pour reverser le format de chaque chunk
+### Ce qui fonctionne
+Laisser Traktor faire son analyse (il genere lui-meme les AUID/TRN3/
+CHKS valides) puis rajouter nos cues dans la NML qu'il gere. Les
+cues sont des donnees "utilisateur" que Traktor n'ecrase pas au load.
 
-### Fichiers de test
-- `data/inspection/mp3_works/` — 5 MP3 Beatport (PRIV injectee artwork only)
-- `data/test_injection/` — copie de test
-- `data/ExportRB_03.2026.xml` — export Rekordbox reel (5510 tracks)
+## Repo GitHub
 
-### Bibliotheque MacBook
-- **Originaux** : sur le MacBook + backup disque externe
-- **NE PAS modifier les originaux** — travailler sur la copie
-- Traktor 4.4.2 sur le MacBook
+- `NowCode-dev/traktor-data-converter` (public)
+- Derniere version : commit `24ddbbb` (2026-04-14)
+- Installation : `pip3 install --user git+https://github.com/NowCode-dev/traktor-data-converter.git`
 
 ## Environnement
 
-- Dev : Mac (disque externe EXT_MINI01), Python 3.9 dans .venv
-- MacBook : MacBook Pro 2018, Ventura 13.2.1, Python 3.9 (Xcode CLT)
-- tkinter CASSE sur le MacBook (Aqua theme + dark mode) → utiliser Rich
-- GitHub : `NowCode-dev/traktor-data-converter` (public)
+- **Mac Mini local** (EXT_MINI01) : dev + tests preliminaires uniquement
+- **MacBook Pro 2018** (Ventura 13.2.1) : environnement reel avec
+  Traktor Pro 4.4.2 + Rekordbox + bibliotheque MP3
+- Backup complet de la bibliotheque sur disque externe (fait par Lorys)
 
-## Notes techniques
+## Code actuel
 
-- DATA version = **20** (pas 19 comme dans le rapport initial)
+### Modules cles
+- `src/traktord/parsers/rekordbox.py` — Parser XML Rekordbox → Collection
+- `src/traktord/converters/traktor.py` — TraktorWriter avec `include_cues=False`
+  pour Phase 1
+- `src/traktord/merge_cues.py` — Phase 2 : merge dans collection.nml
+- `src/traktord/utils/trmd.py` — Serialiseur TRMD complet (utilise pour
+  l'artwork minimal en Phase 1 ; `build_full_trmd` garde en library mais
+  non utilise dans le flux 2 phases)
+- `src/traktord/cli.py` — Commandes `init` + `merge-cues` + `convert` + `info`
+- `src/traktord/gui.py` — Assistant interactif 2 phases
+
+### Tests
+59 tests verts (19 coverart + 40 trmd dont 10 nouveaux CUEP/full_trmd)
+
+## Notes techniques importantes
+
+- DATA version = 20 pour Traktor Pro 4 (pas 19)
 - VRSN = 7 (format TRMD v7)
-- TRMD root version = 2
-- HDR_ version = 3
-- 180 bytes de padding nul apres le TRMD dans le PRIV (ignorable)
-- SYNC est un conteneur (3 enfants : LMDT, LOCK, MATY)
-- `from __future__ import annotations` sur tous les .py (Python 3.9)
-- `eval-type-backport` requis pour Pydantic sous 3.9
+- Position cues en **millisecondes** float64 LE
+- MKEY index 0-23 : 0-11 majeurs, 12-23 mineurs ; Am = 21
+- Rekordbox key peut etre en Camelot ("8A", "1B") ou classique ("Am")
+- Traktor NML version="19" (meme pour Traktor Pro 4)
+- Le grid est un CUE_V2 TYPE=4 avec HOTCUE=-1 ; les hotcues user ont HOTCUE=0-7
+
+## Scenario de bascule si Phase 2 echoue
+
+Si demain les cues ne s'ajoutent pas correctement :
+1. Verifier que le backup collection.nml existe (cree par merge_cues)
+2. Restaurer si besoin depuis `Traktor 4.4.2/Backup/`
+3. Debug : verifier que le match par filename fonctionne
+4. Fallback : utiliser les file_path complets au lieu du basename
