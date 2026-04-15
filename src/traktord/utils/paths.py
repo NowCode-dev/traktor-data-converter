@@ -52,7 +52,9 @@ def file_path_to_traktor_location(file_path: str, volume_name: str | None = None
         volumeid = volume
         path = "/" + "/".join(parts[3:])  # /Music/...
     elif platform.system() == "Darwin" or path.startswith("/Users/"):
-        volume = volume_name or "Macintosh HD"
+        # Traktor Pro 4 utilise "Mac HD" par defaut dans sa collection.nml,
+        # meme si le volume systeme s'appelle "Macintosh HD".
+        volume = volume_name or "Mac HD"
         volumeid = volume
     else:
         # Linux ou autre

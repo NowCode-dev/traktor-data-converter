@@ -437,5 +437,39 @@ def merge_cues_cmd(source: str, traktor_dir: str | None, keep_grid: bool):
     console.print("\n[yellow]Relance Traktor[/] — les cues sont maintenant integres.")
 
 
+@cli.command()
+@click.option("--traktor-dir", type=click.Path(), default=None,
+              help="Dossier Traktor 4 (auto-detecte par defaut).")
+def cleanup(traktor_dir: str | None):
+    """Nettoyer les entrees dupliquees dans la collection.nml Traktor.
+
+    A utiliser si Traktor a cree des doublons lors de l'import (par ex.
+    apres avoir change le VOLUME de 'Macintosh HD' a 'Mac HD'). Garde
+    l'entree avec AUDIO_ID (analysee) et supprime les autres.
+    """
+    from traktord.merge_cues import find_traktor_collection_nml, cleanup_duplicates
+
+    console.print(f"[bold blue]Traktor Data Converter v{__version__} — Cleanup[/]\n")
+
+    if traktor_dir:
+        nml_path = Path(traktor_dir) / "collection.nml"
+    else:
+        nml_path = find_traktor_collection_nml()
+
+    if not nml_path or not nml_path.exists():
+        raise click.ClickException("collection.nml Traktor introuvable.")
+
+    console.print(f"collection.nml : [cyan]{nml_path}[/]")
+    console.print("[cyan]Nettoyage des doublons...[/]")
+
+    stats = cleanup_duplicates(nml_path)
+
+    console.print()
+    console.print(f"  Avant    : [yellow]{stats['total_before']}[/] entrees")
+    console.print(f"  Apres    : [green]{stats['total_after']}[/] entrees")
+    console.print(f"  Supprimees : [red]{stats['removed']}[/]")
+    console.print(f"  Backup   : [dim]{stats['backup'].name}[/]")
+
+
 if __name__ == "__main__":
     cli()

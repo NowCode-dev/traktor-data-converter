@@ -234,10 +234,41 @@ def main() -> None:
     ))
 
     # Choix de phase
-    console.print("\n[bold]Quelle phase veux-tu lancer ?[/]")
+    console.print("\n[bold]Que veux-tu faire ?[/]")
     console.print("  [cyan]1[/] — Phase 1 : Import initial (NML + artworks)")
     console.print("  [cyan]2[/] — Phase 2 : Merge des cues (apres analyse Traktor)")
-    phase = Prompt.ask("Phase", choices=["1", "2"], default="1")
+    console.print("  [cyan]3[/] — Cleanup : nettoyer les doublons de la collection.nml")
+    phase = Prompt.ask("Choix", choices=["1", "2", "3"], default="1")
+
+    # Cleanup ne demande pas d'XML
+    if phase == "3":
+        traktor_dir = _find_traktor4_dir()
+        if not traktor_dir:
+            folder = _pick_folder_macos()
+            if folder:
+                traktor_dir = Path(folder)
+            else:
+                console.print("[red]Abandon.[/]")
+                sys.exit(1)
+
+        from traktord.merge_cues import cleanup_duplicates
+        nml_path = traktor_dir / "collection.nml"
+        if not nml_path.exists():
+            console.print(f"[red]collection.nml introuvable[/]")
+            sys.exit(1)
+
+        console.print("\n[cyan]Cleanup des doublons en cours...[/]")
+        stats = cleanup_duplicates(nml_path)
+        console.print()
+        console.print(Panel(
+            f"Avant  : [yellow]{stats['total_before']}[/] entrees\n"
+            f"Apres  : [green]{stats['total_after']}[/] entrees\n"
+            f"Supprimees : [red]{stats['removed']}[/]\n\n"
+            f"Backup : [dim]{stats['backup'].name}[/]",
+            title="[bold green]Cleanup OK[/]",
+            border_style="green",
+        ))
+        return
 
     # Selection du fichier Rekordbox
     console.print("\n[bold]Selectionner l'export Rekordbox (.xml)[/]")

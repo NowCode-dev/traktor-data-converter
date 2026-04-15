@@ -133,17 +133,31 @@ def merge_cues(
     not_matched = 0
     total_cues_added = 0
 
+    # Pour chaque filename, on peut avoir plusieurs entrees (doublons).
+    # Priorite aux entrees avec AUDIO_ID (celles que Traktor a analysees).
+    filename_to_entries: dict[str, list[etree._Element]] = {}
+    for entry in collection_elem.findall("ENTRY"):
+        location = entry.find("LOCATION")
+        if location is not None:
+            filename = _extract_filename_from_location(location)
+            if filename:
+                filename_to_entries.setdefault(filename, []).append(entry)
+
     for rb_track in rekordbox_collection.tracks:
         filename = Path(rb_track.file_path).name
-        entry = traktor_entries.get(filename)
+        entries = filename_to_entries.get(filename, [])
 
-        if entry is None:
+        if not entries:
             not_matched += 1
             continue
 
+        # Si plusieurs entrees pour ce filename, prioriser celles avec AUDIO_ID
+        analyzed = [e for e in entries if e.get("AUDIO_ID")]
+        entry = analyzed[0] if analyzed else entries[0]
+
         matched += 1
 
-        # Nettoyer les cues existants si demande
+        # Nettoyer les cues existants si demande (sauf AutoGrid)
         if overwrite_existing_cues:
             _remove_existing_cues(entry)
 
@@ -155,9 +169,16 @@ def merge_cues(
                     entry.remove(cue)
             _add_grid_to_entry(entry, rb_track.grid_offset_ms)
 
+        # Determiner le DISPL_ORDER de depart : apres les AutoGrids existants
+        existing_grid_count = sum(
+            1 for c in entry.findall("CUE_V2") if c.get("TYPE") == "4"
+        )
+        next_displ_order = existing_grid_count
+
         # Ajouter les cues Rekordbox
-        for i, cue in enumerate(rb_track.cue_points):
-            _add_cue_to_entry(entry, cue, displ_order=i)
+        for cue in rb_track.cue_points:
+            _add_cue_to_entry(entry, cue, displ_order=next_displ_order)
+            next_displ_order += 1
             total_cues_added += 1
 
         # Ajouter aussi commentaire et ranking si pas deja dans Traktor
@@ -182,6 +203,84 @@ def merge_cues(
         "matched": matched,
         "not_matched": not_matched,
         "total_cues_added": total_cues_added,
+        "backup": backup,
+    }
+
+
+def cleanup_duplicates(traktor_nml_path: Path) -> dict:
+    """Nettoie les entrees dupliquees dans la collection.nml Traktor.
+
+    Quand on importe une collection et que Traktor re-analyse, il peut
+    creer des doublons (meme filename, VOLUME different). Cette fonction
+    garde uniquement l'entree avec AUDIO_ID (celle que Traktor a analysee)
+    et supprime les autres.
+
+    Args:
+        traktor_nml_path: Chemin vers le collection.nml de Traktor.
+
+    Returns:
+        Dict avec stats : total_before, total_after, removed.
+    """
+    if not traktor_nml_path.exists():
+        raise FileNotFoundError(f"Collection Traktor introuvable : {traktor_nml_path}")
+
+    # Backup
+    backup = _backup_nml(traktor_nml_path)
+
+    tree = etree.parse(str(traktor_nml_path))
+    root = tree.getroot()
+    collection_elem = root.find("COLLECTION")
+    if collection_elem is None:
+        raise ValueError("COLLECTION element introuvable")
+
+    # Grouper par filename
+    filename_to_entries: dict[str, list[etree._Element]] = {}
+    for entry in collection_elem.findall("ENTRY"):
+        location = entry.find("LOCATION")
+        if location is not None:
+            filename = _extract_filename_from_location(location)
+            if filename:
+                filename_to_entries.setdefault(filename, []).append(entry)
+
+    total_before = sum(len(v) for v in filename_to_entries.values())
+    removed = 0
+
+    # Pour chaque groupe de doublons, garder celle avec AUDIO_ID
+    for filename, entries in filename_to_entries.items():
+        if len(entries) <= 1:
+            continue
+
+        # Trier : AUDIO_ID d'abord, puis les autres
+        with_audio = [e for e in entries if e.get("AUDIO_ID")]
+        without_audio = [e for e in entries if not e.get("AUDIO_ID")]
+
+        # Garder la premiere avec AUDIO_ID, supprimer les autres
+        if with_audio:
+            keep = with_audio[0]
+            to_remove = with_audio[1:] + without_audio
+        else:
+            keep = entries[0]
+            to_remove = entries[1:]
+
+        for e in to_remove:
+            collection_elem.remove(e)
+            removed += 1
+
+    # Mettre a jour le compte d'entries
+    new_count = len(collection_elem.findall("ENTRY"))
+    collection_elem.set("ENTRIES", str(new_count))
+
+    tree.write(
+        str(traktor_nml_path),
+        xml_declaration=True,
+        encoding="UTF-8",
+        pretty_print=True,
+    )
+
+    return {
+        "total_before": total_before,
+        "total_after": new_count,
+        "removed": removed,
         "backup": backup,
     }
 
