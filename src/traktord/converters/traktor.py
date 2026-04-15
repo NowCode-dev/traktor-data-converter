@@ -88,6 +88,11 @@ def _build_entry(
         info_elem.set("COMMENT", track.comment)
     if track.label:
         info_elem.set("LABEL", track.label)
+    # COVERARTID : si disponible (dans track.extra), Traktor l'utilise pour
+    # afficher l'artwork dans le browser sans avoir a loader le track
+    coverid = track.extra.get("coverartid") if track.extra else None
+    if coverid:
+        info_elem.set("COVERARTID", coverid)
     if track.remixer:
         info_elem.set("REMIXER", track.remixer)
     if track.mix:

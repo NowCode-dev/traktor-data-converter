@@ -104,25 +104,17 @@ def _run_phase1(xml_path: str, traktor_dir: Path, inject_artworks: bool) -> None
     total = len(collection.tracks)
     console.print(f"  [green]{total}[/] tracks chargees")
 
-    # Backup + ecriture NML sans cues
     backup = _backup_collection(traktor_dir)
     if backup:
         console.print(f"  Backup : [dim]{backup.name}[/]")
 
-    nml_path = traktor_dir / "collection.nml"
-    console.print("[cyan]Ecriture du NML (sans cues pour Phase 1)...[/]")
-    writer = TraktorWriter()
-    writer.write(collection, str(nml_path), include_cues=False)
-    console.print(f"  [green]OK[/] {nml_path}")
-
-    # Injection artworks (PRIV:TRAKTOR4 minimal + cache files)
+    # Injection artworks D'ABORD (pour avoir les COVERARTID a ecrire dans le NML)
+    injected = 0
+    skipped = 0
     if inject_artworks:
         from traktord.utils.trmd import inject_artwork
         coverart_dir = traktor_dir / "Coverart"
         coverart_dir.mkdir(exist_ok=True)
-
-        injected = 0
-        skipped = 0
 
         console.print("[cyan]Injection des artworks...[/]")
         with Progress(
@@ -138,8 +130,12 @@ def _run_phase1(xml_path: str, traktor_dir: Path, inject_artworks: bool) -> None
                 mp3 = Path(track.file_path)
                 if mp3.exists() and mp3.suffix.lower() == ".mp3":
                     try:
-                        result = inject_artwork(mp3, coverart_dir)
-                        if result:
+                        coverid = inject_artwork(mp3, coverart_dir)
+                        if coverid:
+                            # Stocker le coverid dans track.extra pour le writer
+                            if not track.extra:
+                                track.extra = {}
+                            track.extra["coverartid"] = coverid
                             injected += 1
                         else:
                             skipped += 1
@@ -150,6 +146,13 @@ def _run_phase1(xml_path: str, traktor_dir: Path, inject_artworks: bool) -> None
                 progress.advance(task)
 
         console.print(f"  [green]{injected}[/] artworks injectes, {skipped} ignores")
+
+    # Ecriture NML avec COVERARTID maintenant disponibles dans track.extra
+    nml_path = traktor_dir / "collection.nml"
+    console.print("[cyan]Ecriture du NML (sans cues pour Phase 1)...[/]")
+    writer = TraktorWriter()
+    writer.write(collection, str(nml_path), include_cues=False)
+    console.print(f"  [green]OK[/] {nml_path}")
 
     # Instructions Phase 2
     console.print()

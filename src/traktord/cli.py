@@ -323,15 +323,15 @@ def init(source: str, traktor_dir: str | None, no_artwork: bool):
         _sh.copy2(nml_path, backup)
         console.print(f"  Backup : [dim]{backup.name}[/]")
 
-    # Ecriture NML sans cues
+    # Artworks D'ABORD pour que les COVERARTID soient dans le NML
+    if not no_artwork:
+        _inject_artworks_phase1(collection)
+
+    # Ecriture NML sans cues (avec COVERARTID dans INFO pour affichage browser)
     console.print("[cyan]Ecriture du NML (sans cues)...[/]")
     writer = TraktorWriter()
     writer.write(collection, str(nml_path), include_cues=False)
     console.print(f"  [green]OK[/] {nml_path}")
-
-    # Artworks
-    if not no_artwork:
-        _inject_artworks_phase1(collection)
 
     console.print()
     console.print("[bold green]Phase 1 terminee ![/]")
@@ -343,7 +343,7 @@ def init(source: str, traktor_dir: str | None, no_artwork: bool):
 
 
 def _inject_artworks_phase1(collection) -> None:
-    """Injection artwork seule (pour Phase 1)."""
+    """Injection artwork + collecte COVERARTID dans track.extra pour le NML."""
     from traktord.utils.trmd import inject_artwork
 
     coverart_dir = _find_traktor4_coverart_dir()
@@ -365,8 +365,11 @@ def _inject_artworks_phase1(collection) -> None:
             mp3 = Path(track.file_path)
             if mp3.exists() and mp3.suffix.lower() == ".mp3":
                 try:
-                    result = inject_artwork(mp3, coverart_dir)
-                    if result:
+                    coverid = inject_artwork(mp3, coverart_dir)
+                    if coverid:
+                        if not track.extra:
+                            track.extra = {}
+                        track.extra["coverartid"] = coverid
                         injected += 1
                     else:
                         skipped += 1
