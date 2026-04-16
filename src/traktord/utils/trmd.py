@@ -566,6 +566,47 @@ def build_full_trmd(
 
 
 # ----------------------------------------------------------------------------
+# Selection de la bonne APIC (certains MP3 ont plusieurs artworks)
+# ----------------------------------------------------------------------------
+
+#: Priorite des types APIC pour trouver le vrai cover front.
+#: Types ID3v2 : https://id3.org/id3v2.4.0-frames
+#: 3 = Cover (front) — le bon
+#: 0 = Other — parfois utilise a la place du front
+#: 17 = Illustration
+#: 18 = Artist logo
+_APIC_TYPE_PRIORITY = [3, 0, 17, 18]
+
+
+def _select_apic(tags) -> Optional[bytes]:
+    """Selectionne la meilleure frame APIC parmi plusieurs.
+
+    Certains MP3 (Beatport, Rekordbox) ont plusieurs APIC : cover front,
+    back, logo artiste, voire une image de waveform. On veut TOUJOURS le
+    cover front (type=3) en priorite.
+
+    Args:
+        tags: Objet ID3 mutagen.
+
+    Returns:
+        Bytes de l'image JPEG/PNG du cover front, ou None.
+    """
+    # Collecter toutes les APIC
+    apics = [f for f in tags.values() if f.FrameID == "APIC"]
+    if not apics:
+        return None
+
+    # Trier par type selon notre priorite
+    by_type = {getattr(a, "type", 0): a for a in apics}
+    for target_type in _APIC_TYPE_PRIORITY:
+        if target_type in by_type:
+            return by_type[target_type].data
+
+    # Fallback : prendre la premiere APIC disponible
+    return apics[0].data
+
+
+# ----------------------------------------------------------------------------
 # Injection dans un MP3
 # ----------------------------------------------------------------------------
 
@@ -598,12 +639,8 @@ def inject_artwork(
 
     tags = ID3(str(mp3_path))
 
-    # Chercher la frame APIC (artwork embarque)
-    apic_data = None
-    for frame in tags.values():
-        if frame.FrameID == "APIC":
-            apic_data = frame.data
-            break
+    # Selectionner la bonne APIC (cover front en priorite)
+    apic_data = _select_apic(tags)
 
     if apic_data is None:
         return None
@@ -669,11 +706,7 @@ def inject_full_metadata(
     artwork_image = None
     coverid = None
     if include_artwork:
-        apic_data = None
-        for frame in tags.values():
-            if frame.FrameID == "APIC":
-                apic_data = frame.data
-                break
+        apic_data = _select_apic(tags)
 
         if apic_data is not None:
             coverid = generate_coverid(apic_data)
