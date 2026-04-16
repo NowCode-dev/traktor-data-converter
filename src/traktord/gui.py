@@ -241,7 +241,8 @@ def main() -> None:
     console.print("  [cyan]1[/] — Phase 1 : Import initial (NML + artworks)")
     console.print("  [cyan]2[/] — Phase 2 : Merge des cues (apres analyse Traktor)")
     console.print("  [cyan]3[/] — Cleanup : nettoyer les doublons de la collection.nml")
-    phase = Prompt.ask("Choix", choices=["1", "2", "3"], default="1")
+    console.print("  [cyan]4[/] — Reinjecter les artworks (sans re-analyse Traktor)")
+    phase = Prompt.ask("Choix", choices=["1", "2", "3", "4"], default="1")
 
     # Cleanup ne demande pas d'XML
     if phase == "3":
@@ -313,6 +314,42 @@ def main() -> None:
         if not Confirm.ask("Lancer la Phase 1 ?", default=True):
             sys.exit(0)
         _run_phase1(xml_path, traktor_dir, inject_art)
+    elif phase == "4":
+        # Reinjecter les artworks sans toucher aux cues
+        nml_path = traktor_dir / "collection.nml"
+        if not nml_path.exists():
+            console.print(f"[red]collection.nml introuvable[/]")
+            sys.exit(1)
+
+        console.print(Panel(
+            "Re-injection des artworks dans les MP3 +\n"
+            "update des COVERARTID dans le NML existant.\n\n"
+            "[yellow]Ne touche PAS aux cues, BPM, key — pas de re-analyse Traktor.[/]",
+            border_style="cyan",
+        ))
+        if not Confirm.ask("Lancer ?", default=True):
+            sys.exit(0)
+
+        from traktord.parsers.rekordbox import RekordboxParser
+        from traktord.merge_cues import update_coverart_ids
+
+        console.print(f"\n[cyan]Lecture de {xml_path}...[/]")
+        parser = RekordboxParser()
+        collection = parser.parse(xml_path)
+        console.print(f"  [green]{len(collection.tracks)}[/] tracks")
+
+        console.print("[cyan]Re-injection + update NML...[/]")
+        stats = update_coverart_ids(collection, nml_path)
+
+        console.print()
+        console.print(Panel(
+            f"Injectes       : [green]{stats['injected']}[/]\n"
+            f"Skipped        : [dim]{stats['skipped']}[/]\n"
+            f"Entries NML MAJ: [green]{stats['nml_updated']}[/]\n\n"
+            f"Backup : [dim]{stats['backup'].name}[/]",
+            title="[bold green]OK[/]",
+            border_style="green",
+        ))
     else:
         nml_path = traktor_dir / "collection.nml"
         if not nml_path.exists():

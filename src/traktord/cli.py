@@ -440,6 +440,49 @@ def merge_cues_cmd(source: str, traktor_dir: str | None, keep_grid: bool):
     console.print("\n[yellow]Relance Traktor[/] — les cues sont maintenant integres.")
 
 
+@cli.command("reinject-artworks")
+@click.argument("source", type=click.Path(exists=True))
+@click.option("--traktor-dir", type=click.Path(), default=None,
+              help="Dossier Traktor 4 (auto-detecte par defaut).")
+def reinject_artworks_cmd(source: str, traktor_dir: str | None):
+    """Re-injecte les artworks et update les COVERARTID sans toucher aux cues.
+
+    A utiliser apres un fix du selecteur APIC (ex: prendre le front cover
+    au lieu d'une waveform). Ne declenche PAS de re-analyse Traktor.
+    """
+    from traktord.parsers.rekordbox import RekordboxParser
+    from traktord.merge_cues import find_traktor_collection_nml, update_coverart_ids
+
+    console.print(f"[bold blue]Traktor Data Converter v{__version__} — Reinject artworks[/]\n")
+
+    if traktor_dir:
+        nml_path = Path(traktor_dir) / "collection.nml"
+    else:
+        nml_path = find_traktor_collection_nml()
+
+    if not nml_path or not nml_path.exists():
+        raise click.ClickException("collection.nml Traktor introuvable.")
+
+    console.print(f"collection.nml : [cyan]{nml_path}[/]")
+    console.print(f"Lecture des tracks depuis [cyan]{source}[/]...")
+
+    parser = RekordboxParser()
+    collection = parser.parse(source)
+    console.print(f"  [green]{len(collection.tracks)}[/] tracks")
+
+    console.print("[cyan]Re-injection des artworks + update NML...[/]")
+    stats = update_coverart_ids(collection, nml_path)
+
+    console.print()
+    console.print(f"  [green]Injectes[/]       : {stats['injected']}")
+    console.print(f"  [dim]Skipped[/]        : {stats['skipped']}")
+    console.print(f"  [green]Entries NML MAJ[/]: {stats['nml_updated']}")
+    console.print(f"  Backup        : [dim]{stats['backup'].name}[/]")
+    console.print()
+    console.print("[bold green]OK ![/] Relance Traktor : les artworks seront corrects,")
+    console.print("cues et BPM/key preserves (pas de re-analyse).")
+
+
 @cli.command()
 @click.option("--traktor-dir", type=click.Path(), default=None,
               help="Dossier Traktor 4 (auto-detecte par defaut).")

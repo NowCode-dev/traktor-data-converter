@@ -207,6 +207,100 @@ def merge_cues(
     }
 
 
+def update_coverart_ids(
+    rekordbox_collection: Collection,
+    traktor_nml_path: Path,
+) -> dict:
+    """Re-injecte les artworks et update les COVERARTID dans le NML existant.
+
+    Flux non-destructif :
+    1. Re-injecte l'artwork (avec selection APIC front cover) dans chaque MP3
+    2. Re-ecrit les fichiers cache Coverart
+    3. Update l'attribut COVERARTID dans INFO de chaque ENTRY du NML
+    4. NE TOUCHE PAS aux CUE_V2, TEMPO, MUSICAL_KEY, LOUDNESS, AUDIO_ID
+
+    Utilisation : quand on veut corriger juste les artworks sans declencher
+    une re-analyse complete par Traktor.
+
+    Args:
+        rekordbox_collection: Collection Rekordbox (pour les chemins fichiers).
+        traktor_nml_path: Chemin vers le collection.nml de Traktor.
+
+    Returns:
+        Dict avec stats : injected, skipped, nml_updated, backup.
+    """
+    from .trmd import inject_artwork
+
+    if not traktor_nml_path.exists():
+        raise FileNotFoundError(f"Collection Traktor introuvable : {traktor_nml_path}")
+
+    # Backup avant modification
+    backup = _backup_nml(traktor_nml_path)
+
+    # Dossier Coverart a cote du NML
+    coverart_dir = traktor_nml_path.parent / "Coverart"
+    coverart_dir.mkdir(exist_ok=True)
+
+    # 1. Re-injecter les artworks dans les MP3 + collecter les COVERARTID
+    injected = 0
+    skipped = 0
+    path_to_coverid: dict[str, str] = {}
+
+    for track in rekordbox_collection.tracks:
+        mp3_path = Path(track.file_path)
+        if not mp3_path.exists() or mp3_path.suffix.lower() != ".mp3":
+            skipped += 1
+            continue
+
+        try:
+            coverid = inject_artwork(mp3_path, coverart_dir)
+            if coverid:
+                path_to_coverid[mp3_path.name] = coverid
+                injected += 1
+            else:
+                skipped += 1
+        except Exception:
+            skipped += 1
+
+    # 2. Update NML : remplacer COVERARTID dans chaque INFO
+    tree = etree.parse(str(traktor_nml_path))
+    root = tree.getroot()
+    collection_elem = root.find("COLLECTION")
+    if collection_elem is None:
+        raise ValueError("COLLECTION element introuvable")
+
+    nml_updated = 0
+    for entry in collection_elem.findall("ENTRY"):
+        location = entry.find("LOCATION")
+        if location is None:
+            continue
+        filename = location.get("FILE", "")
+        new_coverid = path_to_coverid.get(filename)
+        if not new_coverid:
+            continue
+
+        info = entry.find("INFO")
+        if info is None:
+            continue
+
+        info.set("COVERARTID", new_coverid)
+        nml_updated += 1
+
+    tree.write(
+        str(traktor_nml_path),
+        xml_declaration=True,
+        encoding="UTF-8",
+        pretty_print=True,
+    )
+
+    return {
+        "injected": injected,
+        "skipped": skipped,
+        "nml_updated": nml_updated,
+        "backup": backup,
+    }
+
+
 def cleanup_duplicates(traktor_nml_path: Path) -> dict:
     """Nettoie les entrees dupliquees dans la collection.nml Traktor.
 
