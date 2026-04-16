@@ -4,6 +4,54 @@
 
 ---
 
+## [2026-04-15 → 2026-04-16] — Debug complet procedure 2 phases, fix artworks, procedure stabilisee
+
+### Modifications
+
+**Fix duplicatas et DISPL_ORDER (2026-04-15) :**
+- `src/traktord/utils/paths.py` — VOLUME="Mac HD" par defaut sur macOS (au lieu de "Macintosh HD") pour matcher ce que Traktor 4 utilise
+- `src/traktord/merge_cues.py` — DISPL_ORDER commence apres les AutoGrids existants ; priorite aux entries avec AUDIO_ID quand doublons ; nouvelle fonction `cleanup_duplicates()` pour purger les entries sans AUDIO_ID
+- `src/traktord/cli.py` — Nouvelle commande `cleanup`
+- `src/traktord/gui.py` — Option "3" (cleanup) dans le menu
+
+**Fix affichage artwork browser (2026-04-15) :**
+- `src/traktord/converters/traktor.py` — Ecrit `COVERARTID` dans `INFO` si `track.extra["coverartid"]` defini (pour afficher l'artwork dans le browser sans loader le track)
+- `src/traktord/cli.py` + `src/traktord/gui.py` — Phase 1 fait l'injection artwork AVANT l'ecriture du NML pour collecter les coverids
+- `README.md` — Procedure complete A a Z avec reset, Phase 1, analyse Traktor, Phase 2, verification, restauration backup
+
+**Fix selection APIC (2026-04-16) :**
+- `src/traktord/utils/trmd.py` — Nouvelle fonction `_select_apic()` qui prend l'APIC type=3 (Cover Front) en priorite au lieu de la premiere APIC du MP3. Fallback sur type=0 (Other), 17 (Illustration), 18 (Artist logo), puis premiere disponible
+- Applique a `inject_artwork()` et `inject_full_metadata()`
+
+**Nouvelle commande non-destructive (2026-04-16) :**
+- `src/traktord/merge_cues.py` — `update_coverart_ids()` : re-injecte artworks + update COVERARTID dans NML sans toucher aux cues/analyse
+- `src/traktord/cli.py` — Commande `reinject-artworks`
+- `src/traktord/gui.py` — Option "4" (reinject-artworks) dans le menu
+
+### Decisions
+
+- **VOLUME="Mac HD"** : nom interne utilise par Traktor Pro 4 meme quand le volume systeme macOS s'appelle "Macintosh HD". Sans ce fix, Traktor creait des doublons a chaque import et les playlists se retrouvaient vides
+- **DISPL_ORDER apres AutoGrid** : l'AutoGrid de Traktor utilise DISPL_ORDER=0. Si nos hotcues partent aussi a 0, conflit silencieux et cues non affichees dans les pads
+- **COVERARTID dans INFO** : Traktor utilise cet attribut pour afficher l'artwork dans le browser. Sans lui, il faut loader chaque track dans un deck pour que l'artwork apparaisse
+- **Injection artwork AVANT ecriture NML** : pour collecter les COVERARTID et les ecrire dans le NML. Ordre critique
+- **Selection APIC par type** : les MP3 Beatport/Rekordbox peuvent avoir plusieurs frames APIC (front cover, back, artist logo, voire waveform). Prendre la premiere etait faux et donnait des artworks aleatoires
+- **Procedure 2 phases validee en conditions reelles** : Phase 1 → analyse Traktor → Phase 2. Les cues, BPM, key, commentaires, rating, artworks sont tous preserves. Au rechargement d'un track dans un deck, rien ne disparait
+
+### Validation
+
+- Cues Rekordbox correctement affiches sur les pads A/B/C/D apres Phase 2
+- BPM, key, commentaires, rating preserves apres Traktor rescan
+- Artworks affiches dans deck et (avec fix Cover Front) dans le browser
+- 59 tests verts
+
+### A faire (prochaine session)
+
+- Lorys refait une procedure complete depuis zero (reset + Phase 1 + analyse + Phase 2) avec la derniere version du tool integrant tous les fixes
+- Valider que tout fonctionne du premier coup sans commande `cleanup` ou `reinject-artworks`
+- Si OK, le projet peut etre considere comme termine pour la migration Rekordbox → Traktor 4
+
+---
+
 ## [2026-04-14] — Approche 2 phases (init + merge-cues)
 
 ### Modifications
