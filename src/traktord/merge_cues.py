@@ -301,6 +301,109 @@ def update_coverart_ids(
     }
 
 
+def add_new_tracks(
+    rekordbox_collection: Collection,
+    traktor_nml_path: Path,
+    inject_artworks: bool = True,
+) -> dict:
+    """Ajoute uniquement les tracks Rekordbox absentes de la collection Traktor.
+
+    Import incremental : seuls les nouveaux tracks sont ajoutes au NML.
+    Traktor ne scannera que ces tracks-la (secondes au lieu d'heures).
+
+    Flux :
+    1. Compare Rekordbox XML avec le NML existant par filename
+    2. Ajoute les ENTRY manquantes (sans cues, comme Phase 1)
+    3. Injecte les artworks pour les nouveaux tracks seulement
+    4. Ecrit les COVERARTID dans les nouvelles ENTRY
+    5. Met a jour le compteur ENTRIES dans COLLECTION
+
+    Args:
+        rekordbox_collection: Collection Rekordbox parsee.
+        traktor_nml_path: Chemin vers la collection.nml Traktor existante.
+        inject_artworks: Si True, injecte les artworks dans les MP3.
+
+    Returns:
+        Dict avec stats : new_tracks, already_present, artworks_injected.
+    """
+    from .converters.traktor import _build_entry
+    from .trmd import inject_artwork
+
+    if not traktor_nml_path.exists():
+        raise FileNotFoundError(f"Collection Traktor introuvable : {traktor_nml_path}")
+
+    backup = _backup_nml(traktor_nml_path)
+
+    # Lire le NML existant
+    tree = etree.parse(str(traktor_nml_path))
+    root = tree.getroot()
+    collection_elem = root.find("COLLECTION")
+    if collection_elem is None:
+        raise ValueError("COLLECTION element introuvable")
+
+    # Index des filenames deja presents
+    existing_filenames: set[str] = set()
+    for entry in collection_elem.findall("ENTRY"):
+        location = entry.find("LOCATION")
+        if location is not None:
+            existing_filenames.add(location.get("FILE", ""))
+
+    # Trouver les nouveaux tracks
+    new_tracks = 0
+    already_present = 0
+    artworks_injected = 0
+    coverart_dir = traktor_nml_path.parent / "Coverart"
+
+    for track in rekordbox_collection.tracks:
+        filename = Path(track.file_path).name
+        if filename in existing_filenames:
+            already_present += 1
+            continue
+
+        # Injecter artwork si demande
+        coverid = None
+        if inject_artworks:
+            mp3_path = Path(track.file_path)
+            if mp3_path.exists() and mp3_path.suffix.lower() == ".mp3":
+                coverart_dir.mkdir(exist_ok=True)
+                try:
+                    coverid = inject_artwork(mp3_path, coverart_dir)
+                    if coverid:
+                        artworks_injected += 1
+                except Exception:
+                    pass
+
+        # Stocker coverid dans extra pour le writer
+        if coverid:
+            if not track.extra:
+                track.extra = {}
+            track.extra["coverartid"] = coverid
+
+        # Construire l'ENTRY NML (sans cues — Phase 1 style)
+        entry_elem = _build_entry(track, include_cues=False)
+        collection_elem.append(entry_elem)
+        new_tracks += 1
+
+    # Mettre a jour le compteur
+    total = len(collection_elem.findall("ENTRY"))
+    collection_elem.set("ENTRIES", str(total))
+
+    tree.write(
+        str(traktor_nml_path),
+        xml_declaration=True,
+        encoding="UTF-8",
+        pretty_print=True,
+    )
+
+    return {
+        "new_tracks": new_tracks,
+        "already_present": already_present,
+        "artworks_injected": artworks_injected,
+        "total": total,
+        "backup": backup,
+    }
+
+
 def cleanup_duplicates(traktor_nml_path: Path) -> dict:
     """Nettoie les entrees dupliquees dans la collection.nml Traktor.
 

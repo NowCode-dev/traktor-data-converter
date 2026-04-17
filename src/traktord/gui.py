@@ -242,7 +242,8 @@ def main() -> None:
     console.print("  [cyan]2[/] — Phase 2 : Merge des cues (apres analyse Traktor)")
     console.print("  [cyan]3[/] — Cleanup : nettoyer les doublons de la collection.nml")
     console.print("  [cyan]4[/] — Reinjecter les artworks (sans re-analyse Traktor)")
-    phase = Prompt.ask("Choix", choices=["1", "2", "3", "4"], default="1")
+    console.print("  [cyan]5[/] — Ajouter de nouveaux tracks (import incremental)")
+    phase = Prompt.ask("Choix", choices=["1", "2", "3", "4", "5"], default="1")
 
     # Cleanup ne demande pas d'XML
     if phase == "3":
@@ -350,6 +351,45 @@ def main() -> None:
             title="[bold green]OK[/]",
             border_style="green",
         ))
+    elif phase == "5":
+        # Import incremental
+        nml_path = traktor_dir / "collection.nml"
+        if not nml_path.exists():
+            console.print(f"[red]collection.nml introuvable — lance d'abord la Phase 1[/]")
+            sys.exit(1)
+
+        if not Confirm.ask("\nAjouter les nouveaux tracks ?", default=True):
+            sys.exit(0)
+
+        from traktord.parsers.rekordbox import RekordboxParser
+        from traktord.merge_cues import add_new_tracks
+
+        console.print(f"\n[cyan]Lecture de {xml_path}...[/]")
+        parser = RekordboxParser()
+        collection = parser.parse(xml_path)
+        console.print(f"  [green]{len(collection.tracks)}[/] tracks dans l'export")
+
+        console.print("[cyan]Import incremental...[/]")
+        stats = add_new_tracks(collection, nml_path, inject_artworks=True)
+
+        console.print()
+        console.print(Panel(
+            f"Nouveaux tracks   : [green]{stats['new_tracks']}[/]\n"
+            f"Deja presents     : [dim]{stats['already_present']}[/]\n"
+            f"Artworks injectes : [green]{stats['artworks_injected']}[/]\n"
+            f"Total collection  : {stats['total']}\n\n"
+            f"Backup : [dim]{stats['backup'].name}[/]",
+            title="[bold green]Import incremental OK[/]",
+            border_style="green",
+        ))
+
+        if stats["new_tracks"] > 0:
+            console.print()
+            console.print("[yellow]Prochaines etapes :[/]")
+            console.print(f"  1. Ouvre Traktor → scanne {stats['new_tracks']} tracks (quelques minutes)")
+            console.print(f"  2. Ferme Traktor")
+            console.print(f"  3. Relance cet outil → Phase 2 (merge des cues)")
+
     else:
         nml_path = traktor_dir / "collection.nml"
         if not nml_path.exists():

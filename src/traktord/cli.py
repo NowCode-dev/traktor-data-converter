@@ -440,6 +440,58 @@ def merge_cues_cmd(source: str, traktor_dir: str | None, keep_grid: bool):
     console.print("\n[yellow]Relance Traktor[/] — les cues sont maintenant integres.")
 
 
+@cli.command("add")
+@click.argument("source", type=click.Path(exists=True))
+@click.option("--traktor-dir", type=click.Path(), default=None,
+              help="Dossier Traktor 4 (auto-detecte par defaut).")
+def add_cmd(source: str, traktor_dir: str | None):
+    """Ajouter les nouveaux tracks Rekordbox a la collection Traktor existante.
+
+    Import incremental : seuls les tracks absents sont ajoutes.
+    Traktor ne scannera que ces tracks (secondes au lieu d'heures).
+    Ensuite, lancer merge-cues pour ajouter les cues des nouveaux tracks.
+    """
+    from traktord.parsers.rekordbox import RekordboxParser
+    from traktord.merge_cues import find_traktor_collection_nml, add_new_tracks
+
+    console.print(f"[bold blue]Traktor Data Converter v{__version__} — Import incremental[/]\n")
+
+    if traktor_dir:
+        nml_path = Path(traktor_dir) / "collection.nml"
+    else:
+        nml_path = find_traktor_collection_nml()
+
+    if not nml_path or not nml_path.exists():
+        raise click.ClickException("collection.nml Traktor introuvable.")
+
+    console.print(f"collection.nml : [cyan]{nml_path}[/]")
+    console.print(f"Lecture de [cyan]{source}[/]...")
+
+    parser = RekordboxParser()
+    collection = parser.parse(source)
+    console.print(f"  [green]{len(collection.tracks)}[/] tracks dans l'export Rekordbox")
+
+    console.print("[cyan]Import incremental...[/]")
+    stats = add_new_tracks(collection, nml_path, inject_artworks=True)
+
+    console.print()
+    console.print(f"  [green]Nouveaux tracks[/]  : {stats['new_tracks']}")
+    console.print(f"  [dim]Deja presents[/]    : {stats['already_present']}")
+    console.print(f"  [green]Artworks injectes[/]: {stats['artworks_injected']}")
+    console.print(f"  [dim]Total collection[/] : {stats['total']}")
+    console.print(f"  Backup            : [dim]{stats['backup'].name}[/]")
+
+    if stats['new_tracks'] > 0:
+        console.print()
+        console.print("[bold green]OK ![/]")
+        console.print(f"\n[yellow]Prochaines etapes :[/]")
+        console.print(f"  1. Ouvre Traktor → scanne {stats['new_tracks']} tracks (quelques minutes)")
+        console.print(f"  2. Ferme Traktor")
+        console.print(f"  3. [cyan]traktor-convert merge-cues {source}[/]")
+    else:
+        console.print("\n[dim]Aucun nouveau track a ajouter.[/]")
+
+
 @cli.command("reinject-artworks")
 @click.argument("source", type=click.Path(exists=True))
 @click.option("--traktor-dir", type=click.Path(), default=None,
