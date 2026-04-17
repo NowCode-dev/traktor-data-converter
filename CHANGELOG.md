@@ -4,6 +4,22 @@
 
 ---
 
+## [2026-04-17] — Import incremental + validation procedure complete
+
+### Modifications
+- `src/traktord/merge_cues.py` — Nouvelle fonction `add_new_tracks()` : import incremental qui n'ajoute que les tracks absentes de la collection Traktor existante
+- `src/traktord/cli.py` — Nouvelle commande `add` pour l'import incremental
+- `src/traktord/gui.py` — Option "5" (import incremental) dans le menu interactif
+
+### Decisions
+- Import incremental pour eviter le rescan de 2-3h a chaque ajout de tracks
+- Match par filename entre Rekordbox XML et NML Traktor existant
+
+### Validation
+- Procedure complete A a Z validee par Lorys : Phase 1 → analyse Traktor → Phase 2. Tout fonctionne (cues, BPM, key, comments, rating, artworks)
+
+---
+
 ## [2026-04-15 → 2026-04-16] — Debug complet procedure 2 phases, fix artworks, procedure stabilisee
 
 ### Modifications
