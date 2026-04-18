@@ -104,6 +104,7 @@ def merge_cues(
     traktor_nml_path: Path,
     overwrite_existing_cues: bool = True,
     overwrite_grid: bool = False,
+    add_load_cue: bool = False,
 ) -> dict:
     """Merge les cues Rekordbox dans la collection.nml Traktor.
 
@@ -114,6 +115,8 @@ def merge_cues(
             avant d'ajouter les cues Rekordbox. Si False, les cues s'accumulent.
         overwrite_grid: Si True, remplace aussi l'AutoGrid Traktor par celui
             de Rekordbox. Par defaut on garde le grid de Traktor (meilleur).
+        add_load_cue: Si True, ajoute un load cue (TYPE=3) a la position du
+            premier hotcue. Le load cue determine ou Traktor demarre au load.
 
     Returns:
         Dict avec stats : matched, not_matched, total_cues_added.
@@ -194,14 +197,14 @@ def merge_cues(
             total_cues_added += 1
 
         # Ajouter un load cue (TYPE=3) a la position du premier hotcue (pad A)
-        # Le load cue determine ou Traktor demarre quand on charge le track dans un deck
-        first_hotcue = next(
-            (c for c in rb_track.cue_points if c.hotcue == 0), None
-        )
-        if first_hotcue:
-            _add_load_cue(entry, first_hotcue.position_ms, displ_order=next_displ_order)
-            next_displ_order += 1
-            total_cues_added += 1
+        if add_load_cue:
+            first_hotcue = next(
+                (c for c in rb_track.cue_points if c.hotcue == 0), None
+            )
+            if first_hotcue:
+                _add_load_cue(entry, first_hotcue.position_ms, displ_order=next_displ_order)
+                next_displ_order += 1
+                total_cues_added += 1
 
         # Ajouter aussi commentaire et ranking si pas deja dans Traktor
         info = entry.find("INFO")

@@ -197,7 +197,7 @@ def _run_phase1(xml_path: str, traktor_dir: Path, inject_artworks: bool) -> None
 # Phase 2 : Merge des cues
 # ----------------------------------------------------------------------------
 
-def _run_phase2(xml_path: str, traktor_dir: Path) -> None:
+def _run_phase2(xml_path: str, traktor_dir: Path, add_load_cue: bool = False) -> None:
     """Phase 2 : Merge les cues Rekordbox dans la collection.nml analysee."""
     from traktord.parsers.rekordbox import RekordboxParser
     from traktord.merge_cues import merge_cues
@@ -224,7 +224,8 @@ def _run_phase2(xml_path: str, traktor_dir: Path) -> None:
         collection,
         nml_path,
         overwrite_existing_cues=True,
-        overwrite_grid=False,  # Garder le grid de Traktor (meilleur)
+        overwrite_grid=False,
+        add_load_cue=add_load_cue,
     )
 
     # Resume
@@ -455,9 +456,13 @@ def main() -> None:
             "4. Ferme Traktor ?",
             border_style="yellow",
         ))
+        load_cue = Confirm.ask(
+            "Ajouter un load cue a la position du premier hotcue ?",
+            default=False,
+        )
         if not Confirm.ask("Lancer la Phase 2 ?", default=True):
             sys.exit(0)
-        _run_phase2(xml_path, traktor_dir)
+        _run_phase2(xml_path, traktor_dir, add_load_cue=load_cue)
 
 
 if __name__ == "__main__":

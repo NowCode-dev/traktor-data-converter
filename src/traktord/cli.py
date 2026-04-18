@@ -388,7 +388,9 @@ def _inject_artworks_phase1(collection) -> None:
               help="Dossier Traktor 4 (auto-detecte par defaut).")
 @click.option("--keep-grid/--overwrite-grid", default=True,
               help="Garder le beatgrid de Traktor (recommande) ou reecrire avec Rekordbox.")
-def merge_cues_cmd(source: str, traktor_dir: str | None, keep_grid: bool):
+@click.option("--load-cue/--no-load-cue", default=False,
+              help="Ajouter un load cue a la position du premier hotcue.")
+def merge_cues_cmd(source: str, traktor_dir: str | None, keep_grid: bool, load_cue: bool):
     """Phase 2 : Merge les cues Rekordbox dans la collection.nml analysee.
 
     A lancer APRES avoir fait 'init' et attendu que Traktor finisse son
@@ -428,6 +430,7 @@ def merge_cues_cmd(source: str, traktor_dir: str | None, keep_grid: bool):
         nml_path,
         overwrite_existing_cues=True,
         overwrite_grid=not keep_grid,
+        add_load_cue=load_cue,
     )
 
     console.print()
