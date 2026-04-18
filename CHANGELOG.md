@@ -4,6 +4,19 @@
 
 ---
 
+## [2026-04-18] — Systeme de licence freemium + lancement commercial
+
+### Modifications
+- `src/traktord/license.py` — Nouveau module : generation/validation cle, limite 25 tracks, fichier ~/.deck2deck-license
+- `src/traktord/gui.py` — Verification licence en Phase 1 et 2, option "6" activation licence, banniere avec statut licence
+
+### Decisions
+- Cle universelle (meme pour tous les acheteurs) — suffisant pour $20, pas d'anti-piraterie
+- Gumroad pour la vente (pas Odoo) — overkill pour un produit a $20
+- Limite 25 tracks en mode gratuit
+
+---
+
 ## [2026-04-17] — Import incremental + validation procedure complete
 
 ### Modifications
