@@ -76,6 +76,18 @@ def _add_grid_to_entry(entry: etree._Element, grid_offset_ms: float) -> None:
     grid_cue.set("HOTCUE", "-1")
 
 
+def _add_load_cue(entry: etree._Element, position_ms: float, displ_order: int) -> None:
+    """Ajoute un load cue (TYPE=3) — position de demarrage au load dans un deck."""
+    load_cue = etree.SubElement(entry, "CUE_V2")
+    load_cue.set("NAME", "")
+    load_cue.set("DISPL_ORDER", str(displ_order))
+    load_cue.set("TYPE", "3")
+    load_cue.set("START", f"{position_ms:.6f}")
+    load_cue.set("LEN", "0.000000")
+    load_cue.set("REPEATS", "-1")
+    load_cue.set("HOTCUE", "-1")
+
+
 def _remove_existing_cues(entry: etree._Element) -> int:
     """Supprime les CUE_V2 existants (sauf beatgrid)."""
     removed = 0
@@ -178,6 +190,16 @@ def merge_cues(
         # Ajouter les cues Rekordbox
         for cue in rb_track.cue_points:
             _add_cue_to_entry(entry, cue, displ_order=next_displ_order)
+            next_displ_order += 1
+            total_cues_added += 1
+
+        # Ajouter un load cue (TYPE=3) a la position du premier hotcue (pad A)
+        # Le load cue determine ou Traktor demarre quand on charge le track dans un deck
+        first_hotcue = next(
+            (c for c in rb_track.cue_points if c.hotcue == 0), None
+        )
+        if first_hotcue:
+            _add_load_cue(entry, first_hotcue.position_ms, displ_order=next_displ_order)
             next_displ_order += 1
             total_cues_added += 1
 
