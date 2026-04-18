@@ -90,6 +90,24 @@ def _pick_folder_macos() -> Optional[str]:
 # Phase 1 : Import initial (NML sans cues + artworks)
 # ----------------------------------------------------------------------------
 
+def _check_license(track_count: int) -> bool:
+    """Verifie la limite de tracks. Retourne True si autorise."""
+    from traktord.license import check_track_limit, GUMROAD_URL
+    ok, msg = check_track_limit(track_count)
+    if ok:
+        console.print(f"  [dim]{msg}[/]")
+        return True
+    console.print()
+    console.print(Panel(
+        f"[red]{msg}[/]\n\n"
+        f"[cyan]{GUMROAD_URL}[/]\n\n"
+        "[dim]Activez votre licence : option 6 du menu principal[/]",
+        title="[bold yellow]Limite atteinte[/]",
+        border_style="yellow",
+    ))
+    return False
+
+
 def _run_phase1(xml_path: str, traktor_dir: Path, inject_artworks: bool) -> None:
     """Phase 1 : NML sans cues + artwork pour que Traktor analyse."""
     from traktord.parsers.rekordbox import RekordboxParser
@@ -103,6 +121,10 @@ def _run_phase1(xml_path: str, traktor_dir: Path, inject_artworks: bool) -> None
     collection = parser.parse(xml_path)
     total = len(collection.tracks)
     console.print(f"  [green]{total}[/] tracks chargees")
+
+    # Verification licence
+    if not _check_license(total):
+        return
 
     backup = _backup_collection(traktor_dir)
     if backup:
@@ -190,6 +212,10 @@ def _run_phase2(xml_path: str, traktor_dir: Path) -> None:
     total_cues = sum(len(t.cue_points) for t in collection.tracks)
     console.print(f"  [green]{total}[/] tracks, {total_cues} cues")
 
+    # Verification licence
+    if not _check_license(total):
+        return
+
     # Merge
     nml_path = traktor_dir / "collection.nml"
     console.print(f"[cyan]Merge dans {nml_path}...[/]")
@@ -224,14 +250,19 @@ def _run_phase2(xml_path: str, traktor_dir: Path) -> None:
 def main() -> None:
     """Point d'entree interactif."""
 
+    from traktord.license import (
+        is_licensed, load_license, validate_license_key, save_license,
+        FREE_TRACK_LIMIT, GUMROAD_URL,
+    )
+
+    # Banniere
+    license_status = "[green]Unlimited[/]" if is_licensed() else f"[yellow]Free ({FREE_TRACK_LIMIT} tracks)[/]"
     console.print()
     console.print(Panel(
-        "[bold cyan]Traktor Data Converter[/]\n"
+        "[bold cyan]deck2deck[/]\n"
         "[dim]Rekordbox  \u2192  Traktor Pro 4[/]\n\n"
-        "[dim]Migration en 2 phases :[/]\n"
-        "[dim]1. Import NML + artworks → Traktor analyse[/]\n"
-        "[dim]2. Merge des cues dans la collection analysee[/]\n\n"
-        "[dim]NowCode Sarl — nowcode.ch[/]",
+        f"Licence : {license_status}\n"
+        "[dim]deck2deck.ch[/]",
         border_style="cyan",
         padding=(1, 4),
     ))
@@ -243,7 +274,25 @@ def main() -> None:
     console.print("  [cyan]3[/] — Cleanup : nettoyer les doublons de la collection.nml")
     console.print("  [cyan]4[/] — Reinjecter les artworks (sans re-analyse Traktor)")
     console.print("  [cyan]5[/] — Ajouter de nouveaux tracks (import incremental)")
-    phase = Prompt.ask("Choix", choices=["1", "2", "3", "4", "5"], default="1")
+    console.print("  [cyan]6[/] — Activer une licence unlimited")
+    phase = Prompt.ask("Choix", choices=["1", "2", "3", "4", "5", "6"], default="1")
+
+    # Activation de licence
+    if phase == "6":
+        console.print()
+        if is_licensed():
+            console.print(f"[green]Licence deja active :[/] {load_license()}")
+            return
+
+        console.print(f"Achetez une licence sur : [cyan]{GUMROAD_URL}[/]")
+        console.print("Entrez la cle recue par email apres achat.\n")
+        key = Prompt.ask("Cle de licence")
+        if validate_license_key(key):
+            save_license(key)
+            console.print("[bold green]Licence activee ! Tracks illimites.[/]")
+        else:
+            console.print("[red]Cle invalide. Verifiez le format : D2D-XXXXX-XXXXX-XXXXX-XXXXX[/]")
+        return
 
     # Cleanup ne demande pas d'XML
     if phase == "3":
