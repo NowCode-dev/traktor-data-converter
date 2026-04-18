@@ -58,7 +58,7 @@ def _pick_file_macos() -> Optional[str]:
             [
                 "osascript", "-e",
                 'set f to POSIX path of (choose file of type {"xml"} '
-                'with prompt "Selectionner l\'export Rekordbox (.xml)")'
+                'with prompt "Select Rekordbox export (.xml)")'
             ],
             capture_output=True, text=True, timeout=120,
         )
@@ -75,7 +75,7 @@ def _pick_folder_macos() -> Optional[str]:
             [
                 "osascript", "-e",
                 'set f to POSIX path of (choose folder '
-                'with prompt "Selectionner le dossier Traktor 4")'
+                'with prompt "Select Traktor 4 folder")'
             ],
             capture_output=True, text=True, timeout=120,
         )
@@ -101,8 +101,8 @@ def _check_license(track_count: int) -> bool:
     console.print(Panel(
         f"[red]{msg}[/]\n\n"
         f"[cyan]{GUMROAD_URL}[/]\n\n"
-        "[dim]Activez votre licence : option 6 du menu principal[/]",
-        title="[bold yellow]Limite atteinte[/]",
+        "[dim]Activate your licence: option 6 from the main menu[/]",
+        title="[bold yellow]Limit reached[/]",
         border_style="yellow",
     ))
     return False
@@ -113,14 +113,14 @@ def _run_phase1(xml_path: str, traktor_dir: Path, inject_artworks: bool) -> None
     from traktord.parsers.rekordbox import RekordboxParser
     from traktord.converters.traktor import TraktorWriter
 
-    console.print("\n[cyan]Phase 1/2 — Import initial[/]\n")
+    console.print("\n[cyan]Phase 1/2 — Initial import[/]\n")
 
     # Parser
-    console.print("[cyan]Lecture de l'export Rekordbox...[/]")
+    console.print("[cyan]Reading Rekordbox export...[/]")
     parser = RekordboxParser()
     collection = parser.parse(xml_path)
     total = len(collection.tracks)
-    console.print(f"  [green]{total}[/] tracks chargees")
+    console.print(f"  [green]{total}[/] tracks loaded")
 
     # Verification licence
     if not _check_license(total):
@@ -138,7 +138,7 @@ def _run_phase1(xml_path: str, traktor_dir: Path, inject_artworks: bool) -> None
         coverart_dir = traktor_dir / "Coverart"
         coverart_dir.mkdir(exist_ok=True)
 
-        console.print("[cyan]Injection des artworks...[/]")
+        console.print("[cyan]Injecting artworks...[/]")
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -167,11 +167,11 @@ def _run_phase1(xml_path: str, traktor_dir: Path, inject_artworks: bool) -> None
                     skipped += 1
                 progress.advance(task)
 
-        console.print(f"  [green]{injected}[/] artworks injectes, {skipped} ignores")
+        console.print(f"  [green]{injected}[/] artworks injected, {skipped} skipped")
 
     # Ecriture NML avec COVERARTID maintenant disponibles dans track.extra
     nml_path = traktor_dir / "collection.nml"
-    console.print("[cyan]Ecriture du NML (sans cues pour Phase 1)...[/]")
+    console.print("[cyan]Writing NML (no cues for Phase 1)...[/]")
     writer = TraktorWriter()
     writer.write(collection, str(nml_path), include_cues=False)
     console.print(f"  [green]OK[/] {nml_path}")
@@ -179,15 +179,15 @@ def _run_phase1(xml_path: str, traktor_dir: Path, inject_artworks: bool) -> None
     # Instructions Phase 2
     console.print()
     console.print(Panel(
-        "[bold]Phase 1 terminee ![/]\n\n"
-        f"[cyan]Tracks importees :[/] {total}\n"
-        f"[cyan]NML ecrit :[/] [dim]{nml_path}[/]\n\n"
-        "[bold yellow]Prochaine etape :[/]\n"
-        "1. Ouvre [cyan]Traktor Pro 4[/]\n"
-        "2. Traktor va analyser les tracks (BPM, key, beatgrid, transients)\n"
-        "3. Attends la fin de l'analyse (peut prendre plusieurs heures)\n"
-        "4. Quand c'est fini, ferme Traktor\n"
-        "5. Relance cet outil et choisis [cyan]Phase 2 — Merge des cues[/]",
+        "[bold]Phase 1 done![/]\n\n"
+        f"[cyan]Tracks imported:[/] {total}\n"
+        f"[cyan]NML written:[/] [dim]{nml_path}[/]\n\n"
+        "[bold yellow]Next steps:[/]\n"
+        "1. Open [cyan]Traktor Pro 4[/]\n"
+        "2. Traktor will analyse tracks (BPM, key, beatgrid, transients)\n"
+        "3. Wait for analysis to complete (may take several hours)\n"
+        "4. Once done, close Traktor\n"
+        "5. Relaunch this tool and choose [cyan]Phase 2 — Merge cues[/]",
         title="[bold green]Phase 1 OK[/]",
         border_style="green",
     ))
@@ -202,10 +202,10 @@ def _run_phase2(xml_path: str, traktor_dir: Path, add_load_cue: bool = False) ->
     from traktord.parsers.rekordbox import RekordboxParser
     from traktord.merge_cues import merge_cues
 
-    console.print("\n[cyan]Phase 2/2 — Merge des cues[/]\n")
+    console.print("\n[cyan]Phase 2/2 — Merge cues[/]\n")
 
     # Parser l'XML Rekordbox pour les cues
-    console.print("[cyan]Lecture des cues Rekordbox...[/]")
+    console.print("[cyan]Reading Rekordbox cues...[/]")
     parser = RekordboxParser()
     collection = parser.parse(xml_path)
     total = len(collection.tracks)
@@ -218,7 +218,7 @@ def _run_phase2(xml_path: str, traktor_dir: Path, add_load_cue: bool = False) ->
 
     # Merge
     nml_path = traktor_dir / "collection.nml"
-    console.print(f"[cyan]Merge dans {nml_path}...[/]")
+    console.print(f"[cyan]Merging into {nml_path}...[/]")
 
     stats = merge_cues(
         collection,
@@ -231,14 +231,14 @@ def _run_phase2(xml_path: str, traktor_dir: Path, add_load_cue: bool = False) ->
     # Resume
     console.print()
     console.print(Panel(
-        f"[cyan]Tracks matchees :[/] [green]{stats['matched']}[/]\n"
-        f"[cyan]Tracks non trouvees :[/] {stats['not_matched']}\n"
-        f"[cyan]Cues ajoutes :[/] [green]{stats['total_cues_added']}[/]\n\n"
-        f"[cyan]Backup :[/] [dim]{stats['backup'].name}[/]\n"
-        f"[cyan]NML :[/] [dim]{nml_path}[/]\n\n"
-        "[bold yellow]Prochaine etape :[/]\n"
-        "Relance Traktor. Tes cues Rekordbox sont maintenant integres\n"
-        "avec l'analyse Traktor. Ils ne devraient plus etre ecrases au rescan.",
+        f"[cyan]Tracks matched:[/] [green]{stats['matched']}[/]\n"
+        f"[cyan]Tracks not found:[/] {stats['not_matched']}\n"
+        f"[cyan]Cues added:[/] [green]{stats['total_cues_added']}[/]\n\n"
+        f"[cyan]Backup:[/] [dim]{stats['backup'].name}[/]\n"
+        f"[cyan]NML:[/] [dim]{nml_path}[/]\n\n"
+        "[bold yellow]Next step:[/]\n"
+        "Relaunch Traktor. Your Rekordbox cues are now integrated\n"
+        "with the Traktor analysis. They should no longer be overwritten on rescan.",
         title="[bold green]Phase 2 OK[/]",
         border_style="green",
     ))
@@ -262,37 +262,37 @@ def main() -> None:
     console.print(Panel(
         "[bold cyan]deck2deck[/]\n"
         "[dim]Rekordbox  \u2192  Traktor Pro 4[/]\n\n"
-        f"Licence : {license_status}\n"
+        f"Licence: {license_status}\n"
         "[dim]deck2deck.ch[/]",
         border_style="cyan",
         padding=(1, 4),
     ))
 
     # Choix de phase
-    console.print("\n[bold]Que veux-tu faire ?[/]")
-    console.print("  [cyan]1[/] — Phase 1 : Import initial (NML + artworks)")
-    console.print("  [cyan]2[/] — Phase 2 : Merge des cues (apres analyse Traktor)")
-    console.print("  [cyan]3[/] — Cleanup : nettoyer les doublons de la collection.nml")
-    console.print("  [cyan]4[/] — Reinjecter les artworks (sans re-analyse Traktor)")
-    console.print("  [cyan]5[/] — Ajouter de nouveaux tracks (import incremental)")
-    console.print("  [cyan]6[/] — Activer une licence unlimited")
-    phase = Prompt.ask("Choix", choices=["1", "2", "3", "4", "5", "6"], default="1")
+    console.print("\n[bold]What do you want to do?[/]")
+    console.print("  [cyan]1[/] — Phase 1: Initial import (NML + artworks)")
+    console.print("  [cyan]2[/] — Phase 2: Merge cues (after Traktor analysis)")
+    console.print("  [cyan]3[/] — Cleanup: remove duplicates from collection.nml")
+    console.print("  [cyan]4[/] — Re-inject artworks (without Traktor re-analysis)")
+    console.print("  [cyan]5[/] — Add new tracks (incremental import)")
+    console.print("  [cyan]6[/] — Activate unlimited licence")
+    phase = Prompt.ask("Choice", choices=["1", "2", "3", "4", "5", "6"], default="1")
 
     # Activation de licence
     if phase == "6":
         console.print()
         if is_licensed():
-            console.print(f"[green]Licence deja active :[/] {load_license()}")
+            console.print(f"[green]Licence already active:[/] {load_license()}")
             return
 
-        console.print(f"Achetez une licence sur : [cyan]{GUMROAD_URL}[/]")
-        console.print("Entrez la cle recue par email apres achat.\n")
-        key = Prompt.ask("Cle de licence")
+        console.print(f"Purchase a licence at: [cyan]{GUMROAD_URL}[/]")
+        console.print("Enter the key received by email after purchase.\n")
+        key = Prompt.ask("Licence key")
         if validate_license_key(key):
             save_license(key)
-            console.print("[bold green]Licence activee ! Tracks illimites.[/]")
+            console.print("[bold green]Licence activated! Unlimited tracks.[/]")
         else:
-            console.print("[red]Cle invalide. Verifiez le format : D2D-XXXXX-XXXXX-XXXXX-XXXXX[/]")
+            console.print("[red]Invalid key. Check the format: D2D-XXXXX-XXXXX-XXXXX-XXXXX[/]")
         return
 
     # Cleanup ne demande pas d'XML
@@ -309,16 +309,16 @@ def main() -> None:
         from traktord.merge_cues import cleanup_duplicates
         nml_path = traktor_dir / "collection.nml"
         if not nml_path.exists():
-            console.print(f"[red]collection.nml introuvable[/]")
+            console.print(f"[red]collection.nml not found[/]")
             sys.exit(1)
 
-        console.print("\n[cyan]Cleanup des doublons en cours...[/]")
+        console.print("\n[cyan]Cleaning up duplicates...[/]")
         stats = cleanup_duplicates(nml_path)
         console.print()
         console.print(Panel(
-            f"Avant  : [yellow]{stats['total_before']}[/] entrees\n"
-            f"Apres  : [green]{stats['total_after']}[/] entrees\n"
-            f"Supprimees : [red]{stats['removed']}[/]\n\n"
+            f"Before : [yellow]{stats['total_before']}[/] entries\n"
+            f"After  : [green]{stats['total_after']}[/] entries\n"
+            f"Removed: [red]{stats['removed']}[/]\n\n"
             f"Backup : [dim]{stats['backup'].name}[/]",
             title="[bold green]Cleanup OK[/]",
             border_style="green",
@@ -326,12 +326,12 @@ def main() -> None:
         return
 
     # Selection du fichier Rekordbox
-    console.print("\n[bold]Selectionner l'export Rekordbox (.xml)[/]")
-    console.print("   [dim]Une fenetre de selection va s'ouvrir...[/]")
+    console.print("\n[bold]Select the Rekordbox export (.xml)[/]")
+    console.print("   [dim]A file picker window will open...[/]")
     xml_path = _pick_file_macos()
 
     if not xml_path:
-        console.print("   [red]Aucun fichier selectionne. Abandon.[/]")
+        console.print("   [red]No file selected. Aborting.[/]")
         sys.exit(1)
 
     console.print(f"   [green]\u2713[/] {xml_path}")
@@ -339,64 +339,64 @@ def main() -> None:
     # Dossier Traktor
     traktor_dir = _find_traktor4_dir()
     if traktor_dir:
-        console.print(f"\n[bold]Dossier Traktor 4 detecte :[/] [cyan]{traktor_dir}[/]")
-        if not Confirm.ask("Utiliser ce dossier ?", default=True):
+        console.print(f"\n[bold]Traktor 4 folder detected:[/] [cyan]{traktor_dir}[/]")
+        if not Confirm.ask("Use this folder?", default=True):
             folder = _pick_folder_macos()
             if folder:
                 traktor_dir = Path(folder)
             else:
-                console.print("[red]Abandon.[/]")
+                console.print("[red]Aborted.[/]")
                 sys.exit(1)
     else:
-        console.print("\n[bold]Dossier Traktor 4 non detecte.[/]")
+        console.print("\n[bold]Traktor 4 folder not detected.[/]")
         folder = _pick_folder_macos()
         if folder:
             traktor_dir = Path(folder)
         else:
-            console.print("[red]Abandon.[/]")
+            console.print("[red]Aborted.[/]")
             sys.exit(1)
 
     # Lancer la phase choisie
     if phase == "1":
         inject_art = Confirm.ask(
-            "\nInjecter les artworks (pochettes) ?",
+            "\nInject artworks (cover art)?",
             default=True,
         )
-        if not Confirm.ask("Lancer la Phase 1 ?", default=True):
+        if not Confirm.ask("Run Phase 1?", default=True):
             sys.exit(0)
         _run_phase1(xml_path, traktor_dir, inject_art)
     elif phase == "4":
         # Reinjecter les artworks sans toucher aux cues
         nml_path = traktor_dir / "collection.nml"
         if not nml_path.exists():
-            console.print(f"[red]collection.nml introuvable[/]")
+            console.print(f"[red]collection.nml not found[/]")
             sys.exit(1)
 
         console.print(Panel(
-            "Re-injection des artworks dans les MP3 +\n"
-            "update des COVERARTID dans le NML existant.\n\n"
-            "[yellow]Ne touche PAS aux cues, BPM, key — pas de re-analyse Traktor.[/]",
+            "Re-injecting artworks into MP3 files +\n"
+            "updating COVERARTID in the existing NML.\n\n"
+            "[yellow]Does NOT touch cues, BPM, key — no Traktor re-analysis triggered.[/]",
             border_style="cyan",
         ))
-        if not Confirm.ask("Lancer ?", default=True):
+        if not Confirm.ask("Run?", default=True):
             sys.exit(0)
 
         from traktord.parsers.rekordbox import RekordboxParser
         from traktord.merge_cues import update_coverart_ids
 
-        console.print(f"\n[cyan]Lecture de {xml_path}...[/]")
+        console.print(f"\n[cyan]Reading {xml_path}...[/]")
         parser = RekordboxParser()
         collection = parser.parse(xml_path)
         console.print(f"  [green]{len(collection.tracks)}[/] tracks")
 
-        console.print("[cyan]Re-injection + update NML...[/]")
+        console.print("[cyan]Re-injecting + updating NML...[/]")
         stats = update_coverart_ids(collection, nml_path)
 
         console.print()
         console.print(Panel(
-            f"Injectes       : [green]{stats['injected']}[/]\n"
+            f"Injected       : [green]{stats['injected']}[/]\n"
             f"Skipped        : [dim]{stats['skipped']}[/]\n"
-            f"Entries NML MAJ: [green]{stats['nml_updated']}[/]\n\n"
+            f"NML entries upd: [green]{stats['nml_updated']}[/]\n\n"
             f"Backup : [dim]{stats['backup'].name}[/]",
             title="[bold green]OK[/]",
             border_style="green",
@@ -405,62 +405,62 @@ def main() -> None:
         # Import incremental
         nml_path = traktor_dir / "collection.nml"
         if not nml_path.exists():
-            console.print(f"[red]collection.nml introuvable — lance d'abord la Phase 1[/]")
+            console.print(f"[red]collection.nml not found — run Phase 1 first[/]")
             sys.exit(1)
 
-        if not Confirm.ask("\nAjouter les nouveaux tracks ?", default=True):
+        if not Confirm.ask("\nAdd new tracks?", default=True):
             sys.exit(0)
 
         from traktord.parsers.rekordbox import RekordboxParser
         from traktord.merge_cues import add_new_tracks
 
-        console.print(f"\n[cyan]Lecture de {xml_path}...[/]")
+        console.print(f"\n[cyan]Reading {xml_path}...[/]")
         parser = RekordboxParser()
         collection = parser.parse(xml_path)
-        console.print(f"  [green]{len(collection.tracks)}[/] tracks dans l'export")
+        console.print(f"  [green]{len(collection.tracks)}[/] tracks in export")
 
-        console.print("[cyan]Import incremental...[/]")
+        console.print("[cyan]Incremental import...[/]")
         stats = add_new_tracks(collection, nml_path, inject_artworks=True)
 
         console.print()
         console.print(Panel(
-            f"Nouveaux tracks   : [green]{stats['new_tracks']}[/]\n"
-            f"Deja presents     : [dim]{stats['already_present']}[/]\n"
-            f"Artworks injectes : [green]{stats['artworks_injected']}[/]\n"
+            f"New tracks        : [green]{stats['new_tracks']}[/]\n"
+            f"Already present   : [dim]{stats['already_present']}[/]\n"
+            f"Artworks injected : [green]{stats['artworks_injected']}[/]\n"
             f"Total collection  : {stats['total']}\n\n"
             f"Backup : [dim]{stats['backup'].name}[/]",
-            title="[bold green]Import incremental OK[/]",
+            title="[bold green]Incremental import OK[/]",
             border_style="green",
         ))
 
         if stats["new_tracks"] > 0:
             console.print()
-            console.print("[yellow]Prochaines etapes :[/]")
-            console.print(f"  1. Ouvre Traktor → scanne {stats['new_tracks']} tracks (quelques minutes)")
-            console.print(f"  2. Ferme Traktor")
-            console.print(f"  3. Relance cet outil → Phase 2 (merge des cues)")
+            console.print("[yellow]Next steps:[/]")
+            console.print(f"  1. Open Traktor → scan {stats['new_tracks']} tracks (a few minutes)")
+            console.print(f"  2. Close Traktor")
+            console.print(f"  3. Relaunch this tool → Phase 2 (merge cues)")
 
     else:
         nml_path = traktor_dir / "collection.nml"
         if not nml_path.exists():
-            console.print(f"[red]collection.nml introuvable dans {traktor_dir}[/]")
-            console.print("[yellow]Lance d'abord la Phase 1 et l'analyse Traktor.[/]")
+            console.print(f"[red]collection.nml not found in {traktor_dir}[/]")
+            console.print("[yellow]Run Phase 1 and Traktor analysis first.[/]")
             sys.exit(1)
 
         console.print()
         console.print(Panel(
-            "[yellow]As-tu bien :[/]\n"
-            "1. Lance la Phase 1 ?\n"
-            "2. Ouvert Traktor ?\n"
-            "3. Attendu la fin de l'analyse (BPM, key, beatgrid) ?\n"
-            "4. Ferme Traktor ?",
+            "[yellow]Have you:[/]\n"
+            "1. Run Phase 1?\n"
+            "2. Opened Traktor?\n"
+            "3. Waited for analysis to complete (BPM, key, beatgrid)?\n"
+            "4. Closed Traktor?",
             border_style="yellow",
         ))
         load_cue = Confirm.ask(
-            "Ajouter un load cue a la position du premier hotcue ?",
+            "Add a load cue at the position of the first hotcue?",
             default=False,
         )
-        if not Confirm.ask("Lancer la Phase 2 ?", default=True):
+        if not Confirm.ask("Run Phase 2?", default=True):
             sys.exit(0)
         _run_phase2(xml_path, traktor_dir, add_load_cue=load_cue)
 

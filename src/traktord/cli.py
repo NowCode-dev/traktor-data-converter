@@ -37,11 +37,11 @@ def _inject_metadata(collection) -> None:
     coverart_dir = _find_traktor4_coverart_dir()
     if coverart_dir is None:
         console.print(
-            "[yellow]Dossier Coverart Traktor 4 introuvable — "
-            "les artworks ne seront pas mis en cache (mais dans le PRIV).[/]"
+            "[yellow]Traktor 4 Coverart folder not found — "
+            "artworks will not be cached (but will be written to PRIV tag).[/]"
         )
 
-    console.print(f"\n[bold]Injection des metadonnees dans les MP3...[/]")
+    console.print(f"\n[bold]Injecting metadata into MP3 files...[/]")
     if coverart_dir:
         console.print(f"  Cache Coverart : [dim]{coverart_dir}[/]")
 
@@ -70,15 +70,15 @@ def _inject_metadata(collection) -> None:
                 injected += 1
             except Exception as e:
                 errors += 1
-                console.print(f"  [red]Erreur[/] {mp3_path.name}: {e}")
+                console.print(f"  [red]Error[/] {mp3_path.name}: {e}")
 
             progress.advance(task)
 
-    console.print(f"\n  [green]Injectes[/]     : {injected}")
+    console.print(f"\n  [green]Injected[/]     : {injected}")
     if skipped_missing:
-        console.print(f"  [dim]Non trouves[/]  : {skipped_missing}")
+        console.print(f"  [dim]Not found[/]    : {skipped_missing}")
     if errors:
-        console.print(f"  [red]Erreurs[/]      : {errors}")
+        console.print(f"  [red]Errors[/]       : {errors}")
 
 
 def _get_parser(fmt: str):
@@ -86,7 +86,7 @@ def _get_parser(fmt: str):
     if fmt == "rekordbox":
         from traktord.parsers.rekordbox import RekordboxParser
         return RekordboxParser()
-    raise click.ClickException(f"Parser non disponible pour le format '{fmt}'")
+    raise click.ClickException(f"No parser available for format '{fmt}'")
 
 
 def _get_writer(fmt: str):
@@ -94,7 +94,7 @@ def _get_writer(fmt: str):
     if fmt == "traktor":
         from traktord.converters.traktor import TraktorWriter
         return TraktorWriter()
-    raise click.ClickException(f"Writer non disponible pour le format '{fmt}'")
+    raise click.ClickException(f"No writer available for format '{fmt}'")
 
 
 def _default_output(source: str, target_format: str) -> str:
@@ -111,9 +111,9 @@ def _default_output(source: str, target_format: str) -> str:
 @click.group()
 @click.version_option(version=__version__, prog_name="traktor-convert")
 def cli():
-    """Convertisseur multi-formats de bibliotheques DJ.
+    """Multi-format DJ library converter.
 
-    Supporte : Traktor NML, Rekordbox XML.
+    Supports: Traktor NML, Rekordbox XML.
     """
 
 
@@ -122,33 +122,33 @@ def cli():
 @click.option(
     "--from", "source_format",
     type=click.Choice(["traktor", "rekordbox", "serato", "virtualdj"], case_sensitive=False),
-    help="Format source (auto-detecte si non specifie).",
+    help="Source format (auto-detected if not specified).",
 )
 @click.option(
     "--to", "target_format",
     type=click.Choice(["traktor", "rekordbox", "serato", "virtualdj"], case_sensitive=False),
     required=True,
-    help="Format de destination.",
+    help="Target format.",
 )
 @click.option(
     "-o", "--output",
     type=click.Path(),
-    help="Chemin du fichier de sortie.",
+    help="Output file path.",
 )
 @click.option(
     "--dry-run", is_flag=True, default=False,
-    help="Afficher un apercu sans ecrire le fichier.",
+    help="Preview without writing any file.",
 )
 @click.option(
     "--volume",
     type=str,
     default=None,
-    help="Nom du volume macOS (ex: 'Mac HD').",
+    help="macOS volume name (e.g. 'Mac HD').",
 )
 @click.option(
     "--inject/--no-inject", default=True,
-    help="Injecter les metadonnees completes (cues, BPM, key, artwork, comments, rating) "
-         "dans les MP3 via PRIV:TRAKTOR4 + COMM + POPM. Active par defaut.",
+    help="Inject full metadata (cues, BPM, key, artwork, comments, rating) "
+         "into MP3 files via PRIV:TRAKTOR4 + COMM + POPM. Enabled by default.",
 )
 def convert(
     source: str,
@@ -159,7 +159,7 @@ def convert(
     volume: str | None,
     inject: bool,
 ):
-    """Convertir une bibliotheque DJ d'un format a un autre."""
+    """Convert a DJ library from one format to another."""
     console.print(f"[bold blue]Traktor Data Converter v{__version__}[/]\n")
 
     # Auto-detection du format source
@@ -167,15 +167,15 @@ def convert(
         source_format = detect_format(source)
         if not source_format:
             raise click.ClickException(
-                "Impossible de detecter le format source. Utilisez --from pour le specifier."
+                "Unable to detect source format. Use --from to specify it."
             )
-        console.print(f"Format detecte : [cyan]{source_format}[/]")
+        console.print(f"Detected format: [cyan]{source_format}[/]")
 
     if source_format == target_format:
-        raise click.ClickException("Le format source et cible sont identiques.")
+        raise click.ClickException("Source and target formats are identical.")
 
     # Parser
-    console.print(f"Lecture de [cyan]{source}[/]...")
+    console.print(f"Reading [cyan]{source}[/]...")
     parser = _get_parser(source_format)
     collection = parser.parse(source)
 
@@ -185,21 +185,21 @@ def convert(
     tracks_with_key = sum(1 for t in collection.tracks if t.key)
     tracks_with_bpm = sum(1 for t in collection.tracks if t.bpm)
 
-    console.print(f"\n[green]Collection chargee :[/]")
+    console.print(f"\n[green]Collection loaded:[/]")
     console.print(f"  Tracks     : {len(collection.tracks)}")
     console.print(f"  Playlists  : {len(collection.playlists)}")
     console.print(f"  Cue points : {total_cues}")
     console.print(f"  Loops      : {total_loops}")
-    console.print(f"  Avec BPM   : {tracks_with_bpm}")
-    console.print(f"  Avec Key   : {tracks_with_key}")
+    console.print(f"  With BPM   : {tracks_with_bpm}")
+    console.print(f"  With Key   : {tracks_with_key}")
 
     if dry_run:
-        console.print("\n[yellow]Mode dry-run — aucun fichier ecrit.[/]")
+        console.print("\n[yellow]Dry-run mode — no file written.[/]")
         return
 
     # Writer
     output_path = output or _default_output(source, target_format)
-    console.print(f"\nEcriture vers [cyan]{output_path}[/]...")
+    console.print(f"\nWriting to [cyan]{output_path}[/]...")
     writer = _get_writer(target_format)
     writer.write(collection, output_path, volume_name=volume)
 
@@ -207,24 +207,24 @@ def convert(
     if inject and target_format == "traktor":
         _inject_metadata(collection)
 
-    console.print(f"\n[bold green]Conversion terminee ![/]")
+    console.print(f"\n[bold green]Conversion complete![/]")
     console.print(f"  {source_format} → {target_format}")
-    console.print(f"  {len(collection.tracks)} tracks converties")
-    console.print(f"  Fichier : {output_path}")
+    console.print(f"  {len(collection.tracks)} tracks converted")
+    console.print(f"  File: {output_path}")
 
 
 @cli.command()
 @click.argument("source", type=click.Path(exists=True))
 def info(source: str):
-    """Afficher les informations d'une bibliotheque DJ."""
+    """Display information about a DJ library."""
     console.print(f"[bold blue]Traktor Data Converter v{__version__}[/]\n")
 
     fmt = detect_format(source)
     if not fmt:
-        raise click.ClickException("Format non reconnu.")
+        raise click.ClickException("Unrecognised format.")
 
-    console.print(f"Format : [cyan]{fmt}[/]")
-    console.print(f"Fichier : {source}\n")
+    console.print(f"Format: [cyan]{fmt}[/]")
+    console.print(f"File: {source}\n")
 
     parser = _get_parser(fmt)
     collection = parser.parse(source)
@@ -237,10 +237,10 @@ def info(source: str):
         return
 
     # Tableau des 10 premieres tracks
-    table = Table(title="Apercu (10 premieres tracks)")
+    table = Table(title="Preview (first 10 tracks)")
     table.add_column("#", style="dim", width=4)
-    table.add_column("Artiste", max_width=25)
-    table.add_column("Titre", max_width=30)
+    table.add_column("Artist", max_width=25)
+    table.add_column("Title", max_width=30)
     table.add_column("BPM", width=7)
     table.add_column("Key", width=5)
     table.add_column("Cues", width=5)
@@ -262,12 +262,12 @@ def info(source: str):
     bpm_tracks = [t for t in collection.tracks if t.bpm]
     if bpm_tracks:
         avg_bpm = sum(t.bpm for t in bpm_tracks) / len(bpm_tracks)  # type: ignore[arg-type]
-        console.print(f"\nBPM moyen : {avg_bpm:.1f}")
+        console.print(f"\nAverage BPM: {avg_bpm:.1f}")
 
-    console.print(f"Total cue points : {total_cues}")
+    console.print(f"Total cue points: {total_cues}")
 
     if collection.playlists:
-        console.print(f"\n[bold]Playlists :[/]")
+        console.print(f"\n[bold]Playlists:[/]")
         for name, paths in collection.playlists.items():
             console.print(f"  {name} ({len(paths)} tracks)")
 
@@ -275,15 +275,15 @@ def info(source: str):
 @cli.command()
 @click.argument("source", type=click.Path(exists=True))
 @click.option("--traktor-dir", type=click.Path(), default=None,
-              help="Dossier Traktor 4 (auto-detecte par defaut).")
+              help="Traktor 4 folder (auto-detected by default).")
 @click.option("--no-artwork", is_flag=True, default=False,
-              help="Ne pas injecter les artworks (plus rapide).")
+              help="Skip artwork injection (faster).")
 def init(source: str, traktor_dir: str | None, no_artwork: bool):
-    """Phase 1 : Import NML initial (sans cues) + artworks.
+    """Phase 1: Initial NML import (no cues) + artworks.
 
-    Ecrit un collection.nml sans cue points. Ouvre ensuite Traktor qui
-    va analyser tous les tracks (BPM, key, beatgrid, transients). Une
-    fois l'analyse terminee, lance 'merge-cues' pour ajouter les cues.
+    Writes a collection.nml without cue points. Then open Traktor which
+    will analyse all tracks (BPM, key, beatgrid, transients). Once
+    analysis is complete, run 'merge-cues' to add the cues.
     """
     from traktord.parsers.rekordbox import RekordboxParser
     from traktord.converters.traktor import TraktorWriter
@@ -300,17 +300,17 @@ def init(source: str, traktor_dir: str | None, no_artwork: bool):
 
     if not tdir or not tdir.exists():
         raise click.ClickException(
-            "Dossier Traktor 4 introuvable. Utilisez --traktor-dir."
+            "Traktor 4 folder not found. Use --traktor-dir."
         )
 
     console.print(f"Traktor : [cyan]{tdir}[/]")
 
     # Parser
-    console.print(f"Lecture de [cyan]{source}[/]...")
+    console.print(f"Reading [cyan]{source}[/]...")
     parser = RekordboxParser()
     collection = parser.parse(source)
     total = len(collection.tracks)
-    console.print(f"  [green]{total}[/] tracks chargees")
+    console.print(f"  [green]{total}[/] tracks loaded")
 
     # Backup
     nml_path = tdir / "collection.nml"
@@ -328,18 +328,18 @@ def init(source: str, traktor_dir: str | None, no_artwork: bool):
         _inject_artworks_phase1(collection)
 
     # Ecriture NML sans cues (avec COVERARTID dans INFO pour affichage browser)
-    console.print("[cyan]Ecriture du NML (sans cues)...[/]")
+    console.print("[cyan]Writing NML (no cues)...[/]")
     writer = TraktorWriter()
     writer.write(collection, str(nml_path), include_cues=False)
     console.print(f"  [green]OK[/] {nml_path}")
 
     console.print()
-    console.print("[bold green]Phase 1 terminee ![/]")
-    console.print("\n[yellow]Prochaine etape :[/]")
-    console.print("  1. Ouvre [cyan]Traktor Pro 4[/]")
-    console.print("  2. Attends la fin de l'analyse (plusieurs heures possibles)")
-    console.print("  3. Ferme Traktor")
-    console.print(f"  4. Lance : [cyan]traktor-convert merge-cues {source}[/]")
+    console.print("[bold green]Phase 1 done![/]")
+    console.print("\n[yellow]Next steps:[/]")
+    console.print("  1. Open [cyan]Traktor Pro 4[/]")
+    console.print("  2. Wait for analysis to complete (may take several hours)")
+    console.print("  3. Close Traktor")
+    console.print(f"  4. Run: [cyan]traktor-convert merge-cues {source}[/]")
 
 
 def _inject_artworks_phase1(collection) -> None:
@@ -348,7 +348,7 @@ def _inject_artworks_phase1(collection) -> None:
 
     coverart_dir = _find_traktor4_coverart_dir()
 
-    console.print("[cyan]Injection des artworks...[/]")
+    console.print("[cyan]Injecting artworks...[/]")
     injected = 0
     skipped = 0
 
@@ -379,23 +379,23 @@ def _inject_artworks_phase1(collection) -> None:
                 skipped += 1
             progress.advance(task)
 
-    console.print(f"  [green]{injected}[/] injectes, {skipped} ignores")
+    console.print(f"  [green]{injected}[/] injected, {skipped} skipped")
 
 
 @cli.command("merge-cues")
 @click.argument("source", type=click.Path(exists=True))
 @click.option("--traktor-dir", type=click.Path(), default=None,
-              help="Dossier Traktor 4 (auto-detecte par defaut).")
+              help="Traktor 4 folder (auto-detected by default).")
 @click.option("--keep-grid/--overwrite-grid", default=True,
-              help="Garder le beatgrid de Traktor (recommande) ou reecrire avec Rekordbox.")
+              help="Keep Traktor beatgrid (recommended) or overwrite with Rekordbox.")
 @click.option("--load-cue/--no-load-cue", default=False,
-              help="Ajouter un load cue a la position du premier hotcue.")
+              help="Add a load cue at the position of the first hotcue.")
 def merge_cues_cmd(source: str, traktor_dir: str | None, keep_grid: bool, load_cue: bool):
-    """Phase 2 : Merge les cues Rekordbox dans la collection.nml analysee.
+    """Phase 2: Merge Rekordbox cues into the analysed collection.nml.
 
-    A lancer APRES avoir fait 'init' et attendu que Traktor finisse son
-    analyse (BPM, key, beatgrid). Ajoute les CUE_V2 Rekordbox dans la
-    collection.nml sans toucher aux autres donnees.
+    Run AFTER 'init' and after Traktor has finished its analysis
+    (BPM, key, beatgrid). Adds Rekordbox CUE_V2 to collection.nml
+    without touching any other data.
     """
     from traktord.parsers.rekordbox import RekordboxParser
     from traktord.merge_cues import find_traktor_collection_nml, merge_cues
@@ -410,13 +410,13 @@ def merge_cues_cmd(source: str, traktor_dir: str | None, keep_grid: bool, load_c
 
     if not nml_path or not nml_path.exists():
         raise click.ClickException(
-            "collection.nml Traktor introuvable. Utilisez --traktor-dir."
+            "Traktor collection.nml not found. Use --traktor-dir."
         )
 
-    console.print(f"collection.nml : [cyan]{nml_path}[/]")
+    console.print(f"collection.nml: [cyan]{nml_path}[/]")
 
     # Parser Rekordbox pour les cues
-    console.print(f"Lecture des cues depuis [cyan]{source}[/]...")
+    console.print(f"Reading cues from [cyan]{source}[/]...")
     parser = RekordboxParser()
     collection = parser.parse(source)
     total = len(collection.tracks)
@@ -424,7 +424,7 @@ def merge_cues_cmd(source: str, traktor_dir: str | None, keep_grid: bool, load_c
     console.print(f"  [green]{total}[/] tracks, [green]{total_cues}[/] cues")
 
     # Merge
-    console.print("[cyan]Merge en cours...[/]")
+    console.print("[cyan]Merging...[/]")
     stats = merge_cues(
         collection,
         nml_path,
@@ -434,25 +434,25 @@ def merge_cues_cmd(source: str, traktor_dir: str | None, keep_grid: bool, load_c
     )
 
     console.print()
-    console.print(f"  [green]Matchees     :[/] {stats['matched']}")
-    console.print(f"  [dim]Non trouvees  :[/] {stats['not_matched']}")
-    console.print(f"  [green]Cues ajoutes :[/] {stats['total_cues_added']}")
-    console.print(f"  Backup       : [dim]{stats['backup'].name}[/]")
+    console.print(f"  [green]Matched      :[/] {stats['matched']}")
+    console.print(f"  [dim]Not found     :[/] {stats['not_matched']}")
+    console.print(f"  [green]Cues added   :[/] {stats['total_cues_added']}")
+    console.print(f"  Backup        : [dim]{stats['backup'].name}[/]")
     console.print()
-    console.print("[bold green]Phase 2 terminee ![/]")
-    console.print("\n[yellow]Relance Traktor[/] — les cues sont maintenant integres.")
+    console.print("[bold green]Phase 2 done![/]")
+    console.print("\n[yellow]Relaunch Traktor[/] — cues are now integrated.")
 
 
 @cli.command("add")
 @click.argument("source", type=click.Path(exists=True))
 @click.option("--traktor-dir", type=click.Path(), default=None,
-              help="Dossier Traktor 4 (auto-detecte par defaut).")
+              help="Traktor 4 folder (auto-detected by default).")
 def add_cmd(source: str, traktor_dir: str | None):
-    """Ajouter les nouveaux tracks Rekordbox a la collection Traktor existante.
+    """Add new Rekordbox tracks to the existing Traktor collection.
 
-    Import incremental : seuls les tracks absents sont ajoutes.
-    Traktor ne scannera que ces tracks (secondes au lieu d'heures).
-    Ensuite, lancer merge-cues pour ajouter les cues des nouveaux tracks.
+    Incremental import: only absent tracks are added.
+    Traktor will only scan those tracks (seconds instead of hours).
+    Then run merge-cues to add cues for the new tracks.
     """
     from traktord.parsers.rekordbox import RekordboxParser
     from traktord.merge_cues import find_traktor_collection_nml, add_new_tracks
@@ -465,45 +465,45 @@ def add_cmd(source: str, traktor_dir: str | None):
         nml_path = find_traktor_collection_nml()
 
     if not nml_path or not nml_path.exists():
-        raise click.ClickException("collection.nml Traktor introuvable.")
+        raise click.ClickException("Traktor collection.nml not found.")
 
-    console.print(f"collection.nml : [cyan]{nml_path}[/]")
-    console.print(f"Lecture de [cyan]{source}[/]...")
+    console.print(f"collection.nml: [cyan]{nml_path}[/]")
+    console.print(f"Reading [cyan]{source}[/]...")
 
     parser = RekordboxParser()
     collection = parser.parse(source)
-    console.print(f"  [green]{len(collection.tracks)}[/] tracks dans l'export Rekordbox")
+    console.print(f"  [green]{len(collection.tracks)}[/] tracks in Rekordbox export")
 
-    console.print("[cyan]Import incremental...[/]")
+    console.print("[cyan]Incremental import...[/]")
     stats = add_new_tracks(collection, nml_path, inject_artworks=True)
 
     console.print()
-    console.print(f"  [green]Nouveaux tracks[/]  : {stats['new_tracks']}")
-    console.print(f"  [dim]Deja presents[/]    : {stats['already_present']}")
-    console.print(f"  [green]Artworks injectes[/]: {stats['artworks_injected']}")
+    console.print(f"  [green]New tracks[/]       : {stats['new_tracks']}")
+    console.print(f"  [dim]Already present[/]  : {stats['already_present']}")
+    console.print(f"  [green]Artworks injected[/]: {stats['artworks_injected']}")
     console.print(f"  [dim]Total collection[/] : {stats['total']}")
-    console.print(f"  Backup            : [dim]{stats['backup'].name}[/]")
+    console.print(f"  Backup             : [dim]{stats['backup'].name}[/]")
 
     if stats['new_tracks'] > 0:
         console.print()
-        console.print("[bold green]OK ![/]")
-        console.print(f"\n[yellow]Prochaines etapes :[/]")
-        console.print(f"  1. Ouvre Traktor → scanne {stats['new_tracks']} tracks (quelques minutes)")
-        console.print(f"  2. Ferme Traktor")
+        console.print("[bold green]OK![/]")
+        console.print(f"\n[yellow]Next steps:[/]")
+        console.print(f"  1. Open Traktor → scan {stats['new_tracks']} tracks (a few minutes)")
+        console.print(f"  2. Close Traktor")
         console.print(f"  3. [cyan]traktor-convert merge-cues {source}[/]")
     else:
-        console.print("\n[dim]Aucun nouveau track a ajouter.[/]")
+        console.print("\n[dim]No new tracks to add.[/]")
 
 
 @cli.command("reinject-artworks")
 @click.argument("source", type=click.Path(exists=True))
 @click.option("--traktor-dir", type=click.Path(), default=None,
-              help="Dossier Traktor 4 (auto-detecte par defaut).")
+              help="Traktor 4 folder (auto-detected by default).")
 def reinject_artworks_cmd(source: str, traktor_dir: str | None):
-    """Re-injecte les artworks et update les COVERARTID sans toucher aux cues.
+    """Re-inject artworks and update COVERARTID without touching cues.
 
-    A utiliser apres un fix du selecteur APIC (ex: prendre le front cover
-    au lieu d'une waveform). Ne declenche PAS de re-analyse Traktor.
+    Use after fixing the APIC selector (e.g. picking the front cover
+    instead of a waveform). Does NOT trigger a Traktor re-analysis.
     """
     from traktord.parsers.rekordbox import RekordboxParser
     from traktord.merge_cues import find_traktor_collection_nml, update_coverart_ids
@@ -516,37 +516,37 @@ def reinject_artworks_cmd(source: str, traktor_dir: str | None):
         nml_path = find_traktor_collection_nml()
 
     if not nml_path or not nml_path.exists():
-        raise click.ClickException("collection.nml Traktor introuvable.")
+        raise click.ClickException("Traktor collection.nml not found.")
 
-    console.print(f"collection.nml : [cyan]{nml_path}[/]")
-    console.print(f"Lecture des tracks depuis [cyan]{source}[/]...")
+    console.print(f"collection.nml: [cyan]{nml_path}[/]")
+    console.print(f"Reading tracks from [cyan]{source}[/]...")
 
     parser = RekordboxParser()
     collection = parser.parse(source)
     console.print(f"  [green]{len(collection.tracks)}[/] tracks")
 
-    console.print("[cyan]Re-injection des artworks + update NML...[/]")
+    console.print("[cyan]Re-injecting artworks + updating NML...[/]")
     stats = update_coverart_ids(collection, nml_path)
 
     console.print()
-    console.print(f"  [green]Injectes[/]       : {stats['injected']}")
+    console.print(f"  [green]Injected[/]       : {stats['injected']}")
     console.print(f"  [dim]Skipped[/]        : {stats['skipped']}")
-    console.print(f"  [green]Entries NML MAJ[/]: {stats['nml_updated']}")
-    console.print(f"  Backup        : [dim]{stats['backup'].name}[/]")
+    console.print(f"  [green]NML entries upd[/]: {stats['nml_updated']}")
+    console.print(f"  Backup         : [dim]{stats['backup'].name}[/]")
     console.print()
-    console.print("[bold green]OK ![/] Relance Traktor : les artworks seront corrects,")
-    console.print("cues et BPM/key preserves (pas de re-analyse).")
+    console.print("[bold green]OK![/] Relaunch Traktor: artworks will be correct,")
+    console.print("cues and BPM/key preserved (no re-analysis).")
 
 
 @cli.command()
 @click.option("--traktor-dir", type=click.Path(), default=None,
-              help="Dossier Traktor 4 (auto-detecte par defaut).")
+              help="Traktor 4 folder (auto-detected by default).")
 def cleanup(traktor_dir: str | None):
-    """Nettoyer les entrees dupliquees dans la collection.nml Traktor.
+    """Remove duplicate entries from the Traktor collection.nml.
 
-    A utiliser si Traktor a cree des doublons lors de l'import (par ex.
-    apres avoir change le VOLUME de 'Macintosh HD' a 'Mac HD'). Garde
-    l'entree avec AUDIO_ID (analysee) et supprime les autres.
+    Use if Traktor created duplicates during import (e.g. after changing
+    the VOLUME from 'Macintosh HD' to 'Mac HD'). Keeps the entry with
+    AUDIO_ID (analysed) and removes the others.
     """
     from traktord.merge_cues import find_traktor_collection_nml, cleanup_duplicates
 
@@ -558,17 +558,17 @@ def cleanup(traktor_dir: str | None):
         nml_path = find_traktor_collection_nml()
 
     if not nml_path or not nml_path.exists():
-        raise click.ClickException("collection.nml Traktor introuvable.")
+        raise click.ClickException("Traktor collection.nml not found.")
 
-    console.print(f"collection.nml : [cyan]{nml_path}[/]")
-    console.print("[cyan]Nettoyage des doublons...[/]")
+    console.print(f"collection.nml: [cyan]{nml_path}[/]")
+    console.print("[cyan]Removing duplicates...[/]")
 
     stats = cleanup_duplicates(nml_path)
 
     console.print()
-    console.print(f"  Avant    : [yellow]{stats['total_before']}[/] entrees")
-    console.print(f"  Apres    : [green]{stats['total_after']}[/] entrees")
-    console.print(f"  Supprimees : [red]{stats['removed']}[/]")
+    console.print(f"  Before   : [yellow]{stats['total_before']}[/] entries")
+    console.print(f"  After    : [green]{stats['total_after']}[/] entries")
+    console.print(f"  Removed  : [red]{stats['removed']}[/]")
     console.print(f"  Backup   : [dim]{stats['backup'].name}[/]")
 
 
