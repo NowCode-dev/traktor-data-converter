@@ -4,6 +4,17 @@
 
 ---
 
+## [2026-04-19] — Release GitHub v1.0.0 + fix lien de telechargement
+
+### Modifications
+- Creation du tag `v1.0.0` et release GitHub avec notes completes (installation, usage, pricing)
+- Le lien "Download" de deck2deck.ch pointe vers la page releases qui etait vide → maintenant fonctionnel
+
+### Decisions
+- Release GitHub plutot que changer les liens (plus propre, page avec instructions)
+
+---
+
 ## [2026-04-18] — Systeme de licence freemium + lancement commercial
 
 ### Modifications
