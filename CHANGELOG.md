@@ -4,6 +4,41 @@
 
 ---
 
+## [2026-04-25] — v1.3.0 — RELEASE_DATE precise (jour) au lieu de juste l'annee
+
+### Resume
+
+Le champ `<INFO RELEASE_DATE="...">` du NML Traktor est maintenant rempli
+avec la date precise au jour pres lue depuis le fichier audio (tag ID3
+TDRL/TDOR), au lieu de l'annee seule transmise par Rekordbox. Cela permet
+de trier la collection Traktor par date de release dans une colonne
+browser, au jour pres.
+
+### Modifications
+
+- `src/traktord/utils/track_date.py` — nouveau module `get_release_date()`
+  avec strategie en cascade :
+    1. ID3 TDRL ou TDOR (Beatport remplit les deux) -> `YYYY/MM/DD`
+    2. Filesystem birthtime (HFS+/APFS = date d'arrivee disque) -> `YYYY/MM/DD`
+    3. ID3 TDRC + pattern `(MM-YYYY)` du filename -> `YYYY/MM`
+    4. ID3 TDRC seul -> `YYYY`
+    5. None -> fallback sur `track.year` Rekordbox
+- `src/traktord/converters/traktor.py` — le writer NML appelle
+  `get_release_date(track.file_path)` avant de tomber sur `track.year`
+- `tests/test_track_date.py` — 8 tests unitaires (mock mutagen + birthtime)
+
+### Validation empirique
+
+8 MP3 Beatport (2013-2025) testes : tous renvoient une date complete
+au jour pres via TDRL (Beatport remplit ce tag systematiquement).
+Exemples : `2021/06/16`, `2025/01/24`, `2015/11/27`.
+
+### Tests
+
+- 112/112 passent (104 + 8 nouveaux).
+
+---
+
 ## [2026-04-25] — v1.2.0 — Load cue (Q1 RB → Cue 8 Traktor) by default + visible on pad
 
 ### Resume

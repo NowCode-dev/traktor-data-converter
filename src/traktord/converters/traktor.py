@@ -17,6 +17,7 @@ from lxml import etree
 from traktord.models.track import Collection, CuePoint, Track
 from traktord.utils.encoder_delay import get_encoder_delay_ms
 from traktord.utils.keys import classical_to_traktor_key
+from traktord.utils.track_date import get_release_date
 from traktord.utils.paths import file_path_to_traktor_location
 
 # Mapping CuePoint type → NML CUE_V2 TYPE
@@ -116,7 +117,12 @@ def _build_entry(
         info_elem.set("PLAYTIME_FLOAT", f"{track.duration:.6f}")
     if track.date_added:
         info_elem.set("IMPORT_DATE", track.date_added.replace("-", "/"))
-    if track.year:
+    # RELEASE_DATE : prefere la date precise lue du fichier (TDRL/TDOR ou
+    # birthtime), fallback sur l'annee Rekordbox si rien d'exploitable.
+    release_date = get_release_date(track.file_path) if track.file_path else None
+    if release_date:
+        info_elem.set("RELEASE_DATE", release_date)
+    elif track.year:
         info_elem.set("RELEASE_DATE", str(track.year))
     if track.file_size:
         # FILESIZE en KB dans le format NML (pas en bytes)
