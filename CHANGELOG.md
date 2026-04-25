@@ -4,6 +4,68 @@
 
 ---
 
+## [2026-04-25] — v1.1.0 — Fix encoder delay sur cues et beatgrid
+
+### Resume
+
+Bug fix : les positions de cues et le beatgrid arrivaient decales d'environ
+26 ms dans Traktor par rapport a Rekordbox sur les MP3. Cause : encoder
+delay (silence de padding en debut de fichier) traite differemment selon
+les formats. Cette release applique automatiquement la compensation au
+moment de l'ecriture du NML — les cues sont desormais frame-accurate.
+
+### Modifications
+
+- `src/traktord/utils/encoder_delay.py` — nouveau module : lecture de
+  l'encoder delay depuis les fichiers audio
+  - MP3 → frame Xing/LAME via mutagen (fallback 1152 samples si absent)
+  - M4A/AAC → atom iTunSMPB champ [1] en hex
+  - Opus → header pre-skip (48 kHz)
+  - FLAC/WAV/AIFF/OGG Vorbis → 0.0 (pas de padding)
+- `src/traktord/converters/traktor.py` — le writer applique la compensation
+  sur `grid_offset_ms` et chaque `cue.position_ms` lors de l'ecriture
+  du NML. Constante `_ENCODER_DELAY_SIGN = 1`.
+- `scripts/diag_encoder_delay.py` — script de diagnostic empirique :
+  scanne des MP3 reels, croise avec un export Rekordbox, calcule les
+  positions NML pour les 3 valeurs candidates de SIGN, genere un mini
+  NML de test
+- `tests/test_encoder_delay.py` — 11 tests unitaires (mock mutagen,
+  fallbacks, tous les formats)
+- `tests/test_traktor_writer.py` — fix chemin fixture (`traktord-data` →
+  `data`, bug pre-existant, debloquait 13 tests)
+
+### Validation empirique
+
+- 8 MP3 Beatport (2013-2025) testes sur MacBook Pro avec Traktor Pro 4.4.2
+  + Rekordbox 6.8.6
+- Verification au sample pres via grep direct du collection.nml de Traktor
+  apres import : positions ecrites = positions calculees (137.122 ms vs
+  111 ms RB brut sur Old Tortures par ex.)
+- A l'oreille et en cue play : alignement Traktor vs Rekordbox confirme
+- Decouverte cote terrain : les MP3 Beatport tombent **tous** sur le
+  fallback 1152 samples (pas de header Xing/LAME), le fix s'applique
+  donc uniformement = 26.122 ms a 44.1 kHz
+
+### Decisions
+
+- Approche dispatch par format avec valeur autoritaire du fichier (pas
+  d'heuristique), fallback 1152 samples pour les MP3 sans header Xing/LAME
+- Fix silencieux : aucun flag CLI, correction automatique a chaque export
+- Bump 0.1.0 → 1.1.0 (alignement avec le tag GitHub v1.0.0 du 19/04)
+
+### Reste connu (pour suite)
+
+Probleme separe non couvert ici : divergence d'analyse Traktor vs Rekordbox
+sur le beatgrid (les deux softs detectent un BPM/grid_offset legerement
+different sur certains tracks). C'est independant de l'encoder delay et
+sera traite ulterieurement.
+
+### Tests
+
+- 104/104 passent
+
+---
+
 ## [2026-04-19] — Release GitHub v1.0.0 + fix lien de telechargement
 
 ### Modifications

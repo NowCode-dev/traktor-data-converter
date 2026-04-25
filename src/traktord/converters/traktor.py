@@ -15,6 +15,7 @@ from datetime import datetime
 from lxml import etree
 
 from traktord.models.track import Collection, CuePoint, Track
+from traktord.utils.encoder_delay import get_encoder_delay_ms
 from traktord.utils.keys import classical_to_traktor_key
 from traktord.utils.paths import file_path_to_traktor_location
 
@@ -27,6 +28,19 @@ _CUE_TYPE_TO_NML: dict[str, str] = {
     "grid": "4",
     "loop": "5",
 }
+
+# Compensation de l'encoder delay lors de l'ecriture des positions de cue.
+# Rekordbox exporte ses positions en audio-seconds (delay deja absorbe).
+# Traktor interprete les positions NML depuis le debut du fichier brut sur
+# les formats avec padding (MP3 Xing/LAME, M4A iTunSMPB, Opus pre-skip).
+# Valeur :
+#   +1 → additionne le delay aux positions (cas attendu)
+#   -1 → soustrait (a basculer si les cues arrivent en avance apres le fix)
+#    0 → desactive la compensation (regression / debug)
+#
+# A valider empiriquement avec un MP3 concret avant de figer. Cf. HANDOFF.md
+# section "Encoder delay compensation".
+_ENCODER_DELAY_SIGN: int = 1
 
 
 def _build_entry(
@@ -130,12 +144,17 @@ def _build_entry(
 
     # CUE_V2 — d'abord le beatgrid, puis les cues (Phase 2 uniquement)
     if include_cues:
+        # Compensation encoder delay : lu une fois par track depuis le fichier
+        # audio reel (Xing/LAME, iTunSMPB, pre-skip Opus). Retourne 0.0 pour
+        # les formats sans padding (FLAC/WAV/AIFF) ou si la lecture echoue.
+        delay_ms = get_encoder_delay_ms(track.file_path) * _ENCODER_DELAY_SIGN
+
         if track.grid_offset_ms is not None and track.bpm:
             grid_cue = etree.SubElement(entry, "CUE_V2")
             grid_cue.set("NAME", "AutoGrid")
             grid_cue.set("DISPL_ORDER", "0")
             grid_cue.set("TYPE", "4")
-            grid_cue.set("START", f"{track.grid_offset_ms:.6f}")
+            grid_cue.set("START", f"{track.grid_offset_ms + delay_ms:.6f}")
             grid_cue.set("LEN", "0.000000")
             grid_cue.set("REPEATS", "-1")
             grid_cue.set("HOTCUE", "-1")
@@ -145,7 +164,7 @@ def _build_entry(
             cue_elem.set("NAME", cue.name or "")
             cue_elem.set("DISPL_ORDER", str(i))
             cue_elem.set("TYPE", _CUE_TYPE_TO_NML.get(cue.type, "0"))
-            cue_elem.set("START", f"{cue.position_ms:.6f}")
+            cue_elem.set("START", f"{cue.position_ms + delay_ms:.6f}")
             cue_elem.set("LEN", f"{cue.length_ms:.6f}")
             cue_elem.set("REPEATS", "-1")
             cue_elem.set("HOTCUE", str(cue.hotcue))

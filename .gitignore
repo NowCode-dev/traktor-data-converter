@@ -41,6 +41,8 @@ data/inspection/
 data/Exemple/
 data/ExportRB_*.xml
 data/test_injection/
+data/encoder_delay_test/
+Import_MP3_*/
 inspection_dump/
 traktor_coverart_investigation/
 traktor_coverart_investigation.zip

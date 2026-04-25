@@ -1,3 +1,25 @@
+# Handoff — Traktor Data Converter
+
+## ✅ Encoder delay compensation — release v1.1.0 (2026-04-25)
+
+Le fix WIP du 20/04 a ete valide empiriquement le 25/04 sur 8 MP3 Beatport
+(2013-2025). `_ENCODER_DELAY_SIGN = 1` est le bon signe : cues alignes au
+ms pres avec Rekordbox apres import dans Traktor Pro 4.
+
+Decouverte terrain : les MP3 Beatport tombent **tous** sur le fallback 1152
+samples (pas de header Xing/LAME), donc compensation uniforme = 26.122 ms
+a 44.1 kHz. Le cas "header LAME present" reste theorique pour la biblio
+de Lorys.
+
+Cf. `CHANGELOG.md` entry `[2026-04-25] — v1.1.0` pour le detail complet
+et la procedure de validation utilisee (`scripts/diag_encoder_delay.py`).
+
+Probleme separe **non resolu** (a attaquer plus tard) : divergence d'analyse
+Traktor vs Rekordbox sur le beatgrid de certains tracks. Independant de
+l'encoder delay.
+
+---
+
 # Handoff — Traktor Data Converter (fin session 2026-04-16)
 
 > Ce fichier contient tout le contexte pour reprendre le travail dans

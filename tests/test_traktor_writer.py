@@ -9,7 +9,7 @@ from traktord.converters.traktor import TraktorWriter
 from traktord.parsers.rekordbox import RekordboxParser
 
 SAMPLE_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "traktord-data", "samples", "rekordbox_sample.xml"
+    os.path.dirname(__file__), "..", "data", "samples", "rekordbox_sample.xml"
 )
 
 
