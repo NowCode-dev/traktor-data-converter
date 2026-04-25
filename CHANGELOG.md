@@ -4,6 +4,27 @@
 
 ---
 
+## [2026-04-25] — v1.1.2 — Fix broken import in merge_cues (reinject-artworks)
+
+### Resume
+
+Bug fix : `merge_cues.py` avait un import relatif casse `from .trmd
+import inject_artwork` (ligne 257 et 355) qui pointait vers
+`traktord.trmd` au lieu de `traktord.utils.trmd`. Resultat :
+`reinject-artworks` et `update_coverart_ids` plantaient sur
+`ModuleNotFoundError`.
+
+### Modifications
+
+- `src/traktord/merge_cues.py` — corrige les 2 imports :
+  `from .trmd import inject_artwork` -> `from .utils.trmd import inject_artwork`
+
+### Tests
+
+- 104/104 passent.
+
+---
+
 ## [2026-04-25] — v1.1.1 — Fix artwork color channels (RGBA -> BGRA)
 
 ### Resume

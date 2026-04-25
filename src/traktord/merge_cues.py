@@ -254,7 +254,7 @@ def update_coverart_ids(
     Returns:
         Dict avec stats : injected, skipped, nml_updated, backup.
     """
-    from .trmd import inject_artwork
+    from .utils.trmd import inject_artwork
 
     if not traktor_nml_path.exists():
         raise FileNotFoundError(f"Collection Traktor introuvable : {traktor_nml_path}")
@@ -352,7 +352,7 @@ def add_new_tracks(
         Dict avec stats : new_tracks, already_present, artworks_injected.
     """
     from .converters.traktor import _build_entry
-    from .trmd import inject_artwork
+    from .utils.trmd import inject_artwork
 
     if not traktor_nml_path.exists():
         raise FileNotFoundError(f"Collection Traktor introuvable : {traktor_nml_path}")
