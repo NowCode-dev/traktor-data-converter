@@ -161,14 +161,31 @@ class CoverArtImage:
         return HEADER_SIZE + len(self.rgba_pixels)
 
 
+def _swap_rb_channels(rgba: bytes) -> bytes:
+    """Swap les channels R et B (RGBA <-> BGRA).
+
+    Le format pixel sur disque attendu par Traktor 4 est BGRA. Notre representation
+    en memoire est RGBA (cf. PIL). On swap au moment de l'ecriture/lecture du cache
+    pour rester coherent en interne tout en produisant un cache lisible par Traktor.
+    """
+    ba = bytearray(rgba)
+    for i in range(0, len(ba), 4):
+        ba[i], ba[i + 2] = ba[i + 2], ba[i]
+    return bytes(ba)
+
+
 def encode_coverart(image: CoverArtImage) -> bytes:
     """Encode une image dans le format binaire du cache Traktor.
 
+    L'image est stockee sur disque en BGRA (ordre attendu par Traktor 4).
+    Notre representation interne `rgba_pixels` est en RGBA, on swap R<->B
+    avant l'ecriture.
+
     Args:
-        image: L'image source avec ses pixels RGBA.
+        image: L'image source avec ses pixels RGBA en memoire.
 
     Returns:
-        Bytes du fichier cache (header 9 bytes + pixels RGBA).
+        Bytes du fichier cache (header 9 bytes + pixels BGRA).
     """
     header = struct.pack(
         "<BHHHH",
@@ -178,17 +195,20 @@ def encode_coverart(image: CoverArtImage) -> bytes:
         image.height,
         0x0000,
     )
-    return header + image.rgba_pixels
+    return header + _swap_rb_channels(image.rgba_pixels)
 
 
 def decode_coverart(data: bytes) -> CoverArtImage:
     """Decode un fichier cache Traktor en image RGBA.
 
+    Le cache sur disque est en BGRA, on swap R<->B au decodage pour
+    fournir des pixels RGBA en memoire (compatibles PIL).
+
     Args:
         data: Bytes du fichier cache.
 
     Returns:
-        CoverArtImage avec width, height, et pixels RGBA.
+        CoverArtImage avec width, height, et pixels RGBA en memoire.
 
     Raises:
         ValueError: si le format est invalide.
@@ -209,7 +229,7 @@ def decode_coverart(data: bytes) -> CoverArtImage:
     return CoverArtImage(
         width=width,
         height=height,
-        rgba_pixels=data[HEADER_SIZE:],
+        rgba_pixels=_swap_rb_channels(data[HEADER_SIZE:]),
     )
 
 

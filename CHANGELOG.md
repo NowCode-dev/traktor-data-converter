@@ -4,6 +4,46 @@
 
 ---
 
+## [2026-04-25] — v1.1.1 — Fix artwork color channels (RGBA -> BGRA)
+
+### Resume
+
+Bug fix : les artworks injectes dans le cache Coverart de Traktor 4
+apparaissaient avec les channels rouge et bleu inverses (les bleus
+devenaient orange et inversement). Cause : Traktor 4 lit les pixels en
+BGRA, on ecrivait en RGBA. Le fix swappe R<->B au moment de l'ecriture
+et de la lecture du cache.
+
+### Modifications
+
+- `src/traktord/utils/coverart.py` — `encode_coverart` swap RGBA->BGRA
+  avant ecriture, `decode_coverart` swap BGRA->RGBA a la lecture. La
+  representation interne `CoverArtImage.rgba_pixels` reste en RGBA
+  (compatible PIL), seul le format on-disk change.
+
+### Validation empirique
+
+- Test discriminant sur le MacBook Pro : remplacement du fichier cache
+  `145/H1ELPEJANINZSBKGEOPGXRNVCT1C000` (Cosmic Boys/AKKI - Dark Places)
+  par une version avec R/B pre-swappes. Apres quit + relance Traktor,
+  l'artwork est apparu en bleu correct (au lieu de l'orange precedent).
+- Confirme via inspection de l'APIC du MP3 source : image bleue, donc
+  c'etait bien notre encodage qui l'inversait.
+
+### Suite cote utilisateur
+
+Les caches deja generes par v1.1.0 ou avant sont en RGBA et continueront
+a afficher avec channels inverses. Pour les regenerer : refaire la
+Phase 1 `init` ou utiliser `reinject-artworks` apres mise a jour vers
+v1.1.1.
+
+### Tests
+
+- 104/104 passent (les tests round-trip encode/decode restent valides
+  car le swap est symetrique).
+
+---
+
 ## [2026-04-25] — v1.1.0 — Fix encoder delay sur cues et beatgrid
 
 ### Resume
