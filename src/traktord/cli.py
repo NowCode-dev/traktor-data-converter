@@ -388,7 +388,7 @@ def _inject_artworks_phase1(collection) -> None:
               help="Traktor 4 folder (auto-detected by default).")
 @click.option("--keep-grid/--overwrite-grid", default=True,
               help="Keep Traktor beatgrid (recommended) or overwrite with Rekordbox.")
-@click.option("--load-cue/--no-load-cue", default=False,
+@click.option("--load-cue/--no-load-cue", default=True,
               help="Add a load cue at the position of the first hotcue.")
 def merge_cues_cmd(source: str, traktor_dir: str | None, keep_grid: bool, load_cue: bool):
     """Phase 2: Merge Rekordbox cues into the analysed collection.nml.

@@ -457,8 +457,8 @@ def main() -> None:
             border_style="yellow",
         ))
         load_cue = Confirm.ask(
-            "Add a load cue at the position of the first hotcue?",
-            default=False,
+            "Add a load cue at the position of the first hotcue (Q1 RB → Cue 8 Traktor)?",
+            default=True,
         )
         if not Confirm.ask("Run Phase 2?", default=True):
             sys.exit(0)

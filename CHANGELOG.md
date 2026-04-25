@@ -4,6 +4,34 @@
 
 ---
 
+## [2026-04-25] — v1.2.0 — Load cue (Q1 RB → Cue 8 Traktor) by default + visible on pad
+
+### Resume
+
+Le load cue (CUE_V2 TYPE=3) est maintenant ajoute par defaut a la position
+du premier hotcue Rekordbox (Q1) et assigne au pad 8 Traktor (HOTCUE=7)
+au lieu de l'invisible HOTCUE=-1. Comportement classique DJ : le track
+demarre a Q1 au load et le pad 8 est utilisable pour rappeler la position.
+
+### Modifications
+
+- `src/traktord/merge_cues.py` — `_add_load_cue` cherche un pad libre dans
+  l'ordre 7→0, fallback HOTCUE=-1 si tous occupes. Avant : toujours -1.
+- `src/traktord/cli.py` — `--load-cue/--no-load-cue` default True (etait False)
+- `src/traktord/gui.py` — Confirm Phase 2 default True (etait False)
+
+### Migration
+
+Les tracks deja convertis sans load cue (ou avec load cue invisible
+HOTCUE=-1) ne sont pas modifies retroactivement. Pour les corriger :
+relancer Phase 2 (merge-cues) sur l'export Rekordbox.
+
+### Tests
+
+- 104/104 passent.
+
+---
+
 ## [2026-04-25] — v1.1.3 — Add progress bar to reinject-artworks
 
 `update_coverart_ids` (commande `reinject-artworks` / GUI option 4) loop

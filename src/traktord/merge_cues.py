@@ -77,15 +77,40 @@ def _add_grid_to_entry(entry: etree._Element, grid_offset_ms: float) -> None:
 
 
 def _add_load_cue(entry: etree._Element, position_ms: float, displ_order: int) -> None:
-    """Ajoute un load cue (TYPE=3) — position de demarrage au load dans un deck."""
+    """Ajoute un load cue (TYPE=3) — position de demarrage au load dans un deck.
+
+    Le load cue prend par convention le pad 8 (HOTCUE=7) pour etre visible
+    sur les pads tout en declenchant l'auto-jump au load. Si le pad 8 est
+    deja occupe par un hot cue (cue avec TYPE=0 et HOTCUE=7), on cherche
+    un pad libre en descendant 7 → 0. Si tous les pads sont pris, fallback
+    HOTCUE=-1 (load cue fonctionnel mais invisible sur les pads).
+    """
+    # Pads deja occupes par les cues qu'on vient d'ajouter
+    occupied = set()
+    for cue in entry.findall("CUE_V2"):
+        h = cue.get("HOTCUE", "-1")
+        try:
+            h_int = int(h)
+            if 0 <= h_int <= 7:
+                occupied.add(h_int)
+        except ValueError:
+            pass
+
+    # Cherche le slot libre prefere : 7 (= pad 8 dans Traktor), puis 6, 5, ...
+    chosen = -1
+    for slot in (7, 6, 5, 4, 3, 2, 1, 0):
+        if slot not in occupied:
+            chosen = slot
+            break
+
     load_cue = etree.SubElement(entry, "CUE_V2")
-    load_cue.set("NAME", "")
+    load_cue.set("NAME", "Load")
     load_cue.set("DISPL_ORDER", str(displ_order))
     load_cue.set("TYPE", "3")
     load_cue.set("START", f"{position_ms:.6f}")
     load_cue.set("LEN", "0.000000")
     load_cue.set("REPEATS", "-1")
-    load_cue.set("HOTCUE", "-1")
+    load_cue.set("HOTCUE", str(chosen))
 
 
 def _remove_existing_cues(entry: etree._Element) -> int:
