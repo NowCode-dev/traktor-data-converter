@@ -4,6 +4,23 @@
 
 ---
 
+## [2026-04-25] — v1.1.3 — Add progress bar to reinject-artworks
+
+`update_coverart_ids` (commande `reinject-artworks` / GUI option 4) loop
+silencieusement sur 5000+ tracks. Ajout d'une barre rich.Progress avec
+spinner, count M/N, time elapsed et ETA.
+
+### Modifications
+
+- `src/traktord/merge_cues.py` — wrapping de la boucle d'injection avec
+  `rich.progress.Progress`
+
+### Tests
+
+- 104/104 passent.
+
+---
+
 ## [2026-04-25] — v1.1.2 — Fix broken import in merge_cues (reinject-artworks)
 
 ### Resume

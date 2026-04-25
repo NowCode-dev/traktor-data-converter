@@ -254,6 +254,16 @@ def update_coverart_ids(
     Returns:
         Dict avec stats : injected, skipped, nml_updated, backup.
     """
+    from rich.progress import (
+        BarColumn,
+        MofNCompleteColumn,
+        Progress,
+        SpinnerColumn,
+        TextColumn,
+        TimeElapsedColumn,
+        TimeRemainingColumn,
+    )
+
     from .utils.trmd import inject_artwork
 
     if not traktor_nml_path.exists():
@@ -271,21 +281,36 @@ def update_coverart_ids(
     skipped = 0
     path_to_coverid: dict[str, str] = {}
 
-    for track in rekordbox_collection.tracks:
-        mp3_path = Path(track.file_path)
-        if not mp3_path.exists() or mp3_path.suffix.lower() != ".mp3":
-            skipped += 1
-            continue
-
-        try:
-            coverid = inject_artwork(mp3_path, coverart_dir)
-            if coverid:
-                path_to_coverid[mp3_path.name] = coverid
-                injected += 1
-            else:
+    total = len(rekordbox_collection.tracks)
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TextColumn("•"),
+        TimeElapsedColumn(),
+        TextColumn("•"),
+        TimeRemainingColumn(),
+    ) as progress:
+        task = progress.add_task("Re-injecting artworks", total=total)
+        for track in rekordbox_collection.tracks:
+            mp3_path = Path(track.file_path)
+            if not mp3_path.exists() or mp3_path.suffix.lower() != ".mp3":
                 skipped += 1
-        except Exception:
-            skipped += 1
+                progress.advance(task)
+                continue
+
+            try:
+                coverid = inject_artwork(mp3_path, coverart_dir)
+                if coverid:
+                    path_to_coverid[mp3_path.name] = coverid
+                    injected += 1
+                else:
+                    skipped += 1
+            except Exception:
+                skipped += 1
+
+            progress.advance(task)
 
     # 2. Update NML : remplacer COVERARTID dans chaque INFO
     tree = etree.parse(str(traktor_nml_path))
