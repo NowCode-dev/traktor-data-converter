@@ -377,11 +377,12 @@ def _inject_artworks_phase1(collection) -> None:
     ) as progress:
         task = progress.add_task("Artworks", total=len(collection.tracks))
 
+        from traktord.utils.trmd import SUPPORTED_AUDIO_EXTS
         for track in collection.tracks:
-            mp3 = Path(track.file_path)
-            if mp3.exists() and mp3.suffix.lower() == ".mp3":
+            file_path = Path(track.file_path)
+            if file_path.exists() and file_path.suffix.lower() in SUPPORTED_AUDIO_EXTS:
                 try:
-                    coverid = inject_artwork(mp3, coverart_dir)
+                    coverid = inject_artwork(file_path, coverart_dir)
                     if coverid:
                         if not track.extra:
                             track.extra = {}

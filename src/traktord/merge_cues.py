@@ -317,18 +317,20 @@ def update_coverart_ids(
         TextColumn("•"),
         TimeRemainingColumn(),
     ) as progress:
+        from .utils.trmd import SUPPORTED_AUDIO_EXTS
+
         task = progress.add_task("Re-injecting artworks", total=total)
         for track in rekordbox_collection.tracks:
-            mp3_path = Path(track.file_path)
-            if not mp3_path.exists() or mp3_path.suffix.lower() != ".mp3":
+            file_path = Path(track.file_path)
+            if not file_path.exists() or file_path.suffix.lower() not in SUPPORTED_AUDIO_EXTS:
                 skipped += 1
                 progress.advance(task)
                 continue
 
             try:
-                coverid = inject_artwork(mp3_path, coverart_dir)
+                coverid = inject_artwork(file_path, coverart_dir)
                 if coverid:
-                    path_to_coverid[mp3_path.name] = coverid
+                    path_to_coverid[file_path.name] = coverid
                     injected += 1
                 else:
                     skipped += 1
@@ -438,11 +440,12 @@ def add_new_tracks(
         # Injecter artwork si demande
         coverid = None
         if inject_artworks:
-            mp3_path = Path(track.file_path)
-            if mp3_path.exists() and mp3_path.suffix.lower() == ".mp3":
+            from .utils.trmd import SUPPORTED_AUDIO_EXTS
+            file_path = Path(track.file_path)
+            if file_path.exists() and file_path.suffix.lower() in SUPPORTED_AUDIO_EXTS:
                 coverart_dir.mkdir(exist_ok=True)
                 try:
-                    coverid = inject_artwork(mp3_path, coverart_dir)
+                    coverid = inject_artwork(file_path, coverart_dir)
                     if coverid:
                         artworks_injected += 1
                 except Exception:

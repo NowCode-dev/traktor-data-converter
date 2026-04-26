@@ -4,6 +4,41 @@
 
 ---
 
+## [2026-04-26] — v1.6.1 — Apply AIFF/WAV support to all entry points
+
+### Resume
+
+v1.6.0 a etendu `inject_artwork` pour gerer AIFF/WAV, mais 3 callers
+filtraient toujours `suffix == ".mp3"` AVANT d'appeler la fonction —
+les AIFF/WAV etaient skippes silencieusement avant meme que le code
+etendu n'ait sa chance.
+
+Sur l'export reel de Lorys (5511 tracks) :
+- v1.6.0 : 3729 injected, 1782 skipped (AIFF/M4A/WAV/etc.)
+- v1.6.1 : devrait injecter ~530 AIFF supplementaires
+
+### Modifications
+
+- `src/traktord/utils/trmd.py` : nouvelle constante `SUPPORTED_AUDIO_EXTS`
+  = `{".mp3", ".aiff", ".aif", ".wav"}`, exposee comme API publique
+- `src/traktord/merge_cues.py` :
+  - `update_coverart_ids` (option 4 / reinject-artworks)
+  - `add_new_tracks` (option 5 / incremental import)
+- `src/traktord/cli.py` `_inject_artworks_phase1` (commande `init`)
+- `src/traktord/gui.py` `_run_phase1` (option 1 GUI)
+
+### Note
+
+`inject_full_metadata` (commande `convert` via `_inject_metadata`)
+reste MP3-only pour l'instant — usage marginal, etendra plus tard
+si besoin.
+
+### Tests
+
+- 128/128 passent.
+
+---
+
 ## [2026-04-26] — v1.6.0 — Support AIFF and WAV in artwork injection
 
 ### Resume

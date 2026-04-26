@@ -610,6 +610,12 @@ def _select_apic(tags) -> Optional[bytes]:
 # Injection dans un MP3
 # ----------------------------------------------------------------------------
 
+#: Extensions de fichier audio dont les tags ID3 (et donc l'APIC) sont
+#: lisibles/ecrivables par mutagen. Utilise par les commandes Phase 1 / init /
+#: reinject-artworks / add-tracks pour filtrer les fichiers compatibles.
+SUPPORTED_AUDIO_EXTS = frozenset({".mp3", ".aiff", ".aif", ".wav"})
+
+
 def _load_id3_container(file_path: Path):
     """Ouvre un fichier audio supportant ID3 (MP3, AIFF, WAV).
 
