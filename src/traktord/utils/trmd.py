@@ -610,38 +610,73 @@ def _select_apic(tags) -> Optional[bytes]:
 # Injection dans un MP3
 # ----------------------------------------------------------------------------
 
+def _load_id3_container(file_path: Path):
+    """Ouvre un fichier audio supportant ID3 (MP3, AIFF, WAV).
+
+    Returns:
+        Tuple `(tags, audio_obj)` ou `(None, None)` si le fichier n'est pas
+        un container ID3-supporting ou s'il n'a pas de tags lisibles.
+        - `tags` : objet `ID3` avec les frames (APIC, PRIV, etc.)
+        - `audio_obj` : container mutagen (MP3 / AIFF / WAVE) ; appeler
+          `audio_obj.save()` ecrit le fichier complet en preservant la
+          structure du container.
+    """
+    try:
+        from mutagen import File as MutagenFile
+        from mutagen.id3 import ID3
+    except ImportError as e:
+        raise ImportError("mutagen est requis pour l'injection PRIV") from e
+
+    try:
+        audio = MutagenFile(str(file_path))
+    except Exception:
+        return None, None
+    if audio is None:
+        return None, None
+    tags = getattr(audio, "tags", None)
+    if not isinstance(tags, ID3):
+        return None, None
+    return tags, audio
+
+
 def inject_artwork(
-    mp3_path: Path,
+    file_path: Path,
     coverart_dir: Optional[Path] = None,
     coverid: Optional[str] = None,
 ) -> Optional[str]:
-    """Injecte l'artwork dans un MP3 via PRIV:TRAKTOR4 + fichiers cache.
+    """Injecte l'artwork dans un fichier audio via PRIV:TRAKTOR4 + cache.
 
-    Lit la frame APIC du MP3, genere les resolutions Traktor 4,
-    construit le TRMD minimal, et ecrit :
-    1. La frame PRIV:TRAKTOR4 dans le MP3
-    2. Les 3 fichiers cache dans coverart_dir (si fourni)
+    Supporte les fichiers a tags ID3 : MP3, AIFF, WAV. Pour les autres
+    formats (FLAC, Opus, etc.) ou les fichiers sans tags ID3, retourne
+    None silencieusement.
+
+    Pipeline :
+    1. Ouvre le container (MP3 / AIFF / WAV) via mutagen.File
+    2. Selectionne la bonne APIC (cover front en priorite)
+    3. Genere les resolutions Traktor 4 + COVERARTID
+    4. Ecrit la frame PRIV:TRAKTOR4 dans les tags
+    5. Sauve le fichier (preserve la structure du container)
+    6. Ecrit les 3 fichiers cache dans coverart_dir (si fourni)
 
     Args:
-        mp3_path: Chemin vers le fichier MP3.
+        file_path: Chemin vers le fichier audio (MP3 / AIFF / WAV).
         coverart_dir: Dossier Coverart/ de Traktor. Si None, seule la
             frame PRIV est ecrite (pas de cache files).
         coverid: COVERARTID a utiliser. Si None, genere automatiquement
             depuis l'APIC.
 
     Returns:
-        Le COVERARTID utilise, ou None si aucune APIC trouvee.
+        Le COVERARTID utilise, ou None si aucune APIC trouvee ou si le
+        format n'est pas supporte.
     """
-    try:
-        from mutagen.id3 import ID3, PRIV
-    except ImportError as e:
-        raise ImportError("mutagen est requis pour l'injection PRIV") from e
+    from mutagen.id3 import PRIV
 
-    tags = ID3(str(mp3_path))
+    tags, audio = _load_id3_container(file_path)
+    if tags is None or audio is None:
+        return None
 
     # Selectionner la bonne APIC (cover front en priorite)
     apic_data = _select_apic(tags)
-
     if apic_data is None:
         return None
 
@@ -665,7 +700,10 @@ def inject_artwork(
 
     # Ajouter la nouvelle frame PRIV
     tags.add(PRIV(owner=PRIV_OWNER, data=trmd_blob))
-    tags.save(str(mp3_path), v2_version=4)
+
+    # Sauve via le container : pour MP3, AIFF, WAV, mutagen preserve la
+    # structure du fichier (chunks AIFF, RIFF WAV, header MP3).
+    audio.save()
 
     # Ecrire les fichiers cache si le dossier est fourni
     if coverart_dir is not None:

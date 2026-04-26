@@ -4,6 +4,43 @@
 
 ---
 
+## [2026-04-26] — v1.6.0 — Support AIFF and WAV in artwork injection
+
+### Resume
+
+`inject_artwork` etait limite aux MP3 (utilisait `mutagen.id3.ID3` direct).
+Les AIFF et WAV avec tags ID3 embedded ne recevaient pas de cover dans
+Traktor. Maintenant ces 3 formats sont traites uniformement via
+`mutagen.File()` (detection auto du container) + `audio.save()` qui
+preserve la structure du fichier.
+
+### Cas concret
+
+Lorys avait dans sa biblio plusieurs AIFF Booka Shade (achats Beatport
+anciens 2013, doublons iTunes) avec 3 APICs chacun, mais Traktor
+affichait "no artwork" car notre code skippait silencieusement les non-MP3.
+
+### Modifications
+
+- `src/traktord/utils/trmd.py` :
+  - `_load_id3_container()` (nouveau) : ouvre via `mutagen.File()`,
+    retourne `(tags, audio_obj)` ou `(None, None)` si non supporte
+  - `inject_artwork()` refactore : prend `file_path: Path` (au lieu de
+    `mp3_path`), accepte MP3/AIFF/WAV indistinctement, sauve via
+    `audio.save()` qui preserve les chunks AIFF/RIFF WAV
+
+### Limites encore presentes
+
+- FLAC, Opus, OGG Vorbis, M4A : pas (encore) supportes, leur format
+  d'artwork est different (METADATA_BLOCK_PICTURE, MP4 covr atom...).
+  A faire au besoin.
+
+### Tests
+
+- 128/128 passent.
+
+---
+
 ## [2026-04-26] — v1.5.1 — Fix slash in playlist names splitting hierarchy
 
 ### Resume
