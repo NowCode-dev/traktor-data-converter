@@ -50,3 +50,6 @@ traktor_coverart_investigation.zip
 *.wav
 *.flac
 *.aiff
+
+# Coordination Claude (local only)
+CURRENT_WORK.md
