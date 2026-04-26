@@ -4,6 +4,65 @@
 
 ---
 
+## [2026-04-26] — v1.4.0 — Smart playlists "Genre = X" auto-detectees
+
+### Resume
+
+Les playlists Rekordbox du type "Genre = X" sont desormais converties en
+**Traktor SMARTLIST** (avec `<SEARCH_EXPRESSION QUERY="$GENRE % ...">`)
+au lieu de PLAYLIST statique. Couvre les playlists Genres typiques :
+Techno, Tech House, Trance, Breaks, etc. Les autres playlists (statiques
+ou non detectables) restent en LIST.
+
+### Contexte
+
+L'export XML Rekordbox aplatit toutes les smart playlists en listes
+statiques (l'info des criteres est perdue avant qu'on lise). On detecte
+donc heuristiquement les playlists "convention genre" :
+- >=95 % des tracks de la playlist ont un genre qui contient le nom de
+  la playlist (ou inversement), normalisation case-insensitive avec
+  tirets/slashes -> espaces
+- Capture les variantes : playlist "Techno" matche les genres "Techno",
+  "Classic Techno", "Techno (Peak Time)", etc.
+
+Sur l'export reel de Lorys (5511 tracks, 136 playlists) : 16 smart
+playlists detectees automatiquement (Tech House, Techno, Trance, Breaks,
+Deep House, etc.). Les 3 restantes ratent pour mismatch nommage
+(playlist "Funky House" mais genres tracks = "Funk / Soul / Disco").
+
+### Modifications
+
+- `src/traktord/converters/traktor.py` :
+  - `_detect_genre_smart_match()` (nouveau) — heuristique de detection
+  - `_build_smartlist_query()` (nouveau) — construit la query avec
+    variantes tiret/espace en OR
+  - `_build_playlists()` ecrit `<NODE TYPE="SMARTLIST">` au lieu de
+    `<NODE TYPE="PLAYLIST">` quand la convention match
+  - `TraktorWriter.write()` accepte `smart_playlists` et `smart_detected`
+- `src/traktord/cli.py` — flag `--smart-playlists/--no-smart-playlists`
+  sur la commande `init` (default True). Affiche le rapport des smart
+  detectees apres ecriture.
+- `src/traktord/gui.py` — Phase 1 active smart_playlists par defaut +
+  rapport (max 20 affichees, "+ N more" sinon)
+- `tests/test_smart_playlists.py` — 11 tests unitaires
+
+### Format Traktor SMARTLIST genere
+
+```xml
+<NODE TYPE="SMARTLIST" NAME="Tech House">
+  <SMARTLIST UUID="...">
+    <SEARCH_EXPRESSION VERSION="1"
+      QUERY='$GENRE % "Tech House" | $GENRE % "Tech-House"'/>
+  </SMARTLIST>
+</NODE>
+```
+
+### Tests
+
+- 123/123 passent (11 nouveaux).
+
+---
+
 ## [2026-04-25] — v1.3.0 — RELEASE_DATE precise (jour) au lieu de juste l'annee
 
 ### Resume

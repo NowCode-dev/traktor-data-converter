@@ -278,7 +278,10 @@ def info(source: str):
               help="Traktor 4 folder (auto-detected by default).")
 @click.option("--no-artwork", is_flag=True, default=False,
               help="Skip artwork injection (faster).")
-def init(source: str, traktor_dir: str | None, no_artwork: bool):
+@click.option("--smart-playlists/--no-smart-playlists", default=True,
+              help="Auto-detect 'Genre = X' convention playlists and write "
+                   "them as Traktor SMARTLIST (default: enabled).")
+def init(source: str, traktor_dir: str | None, no_artwork: bool, smart_playlists: bool):
     """Phase 1: Initial NML import (no cues) + artworks.
 
     Writes a collection.nml without cue points. Then open Traktor which
@@ -330,8 +333,21 @@ def init(source: str, traktor_dir: str | None, no_artwork: bool):
     # Ecriture NML sans cues (avec COVERARTID dans INFO pour affichage browser)
     console.print("[cyan]Writing NML (no cues)...[/]")
     writer = TraktorWriter()
-    writer.write(collection, str(nml_path), include_cues=False)
+    smart_detected: list[tuple[str, str]] = []
+    writer.write(
+        collection,
+        str(nml_path),
+        include_cues=False,
+        smart_playlists=smart_playlists,
+        smart_detected=smart_detected,
+    )
     console.print(f"  [green]OK[/] {nml_path}")
+    if smart_detected:
+        console.print(
+            f"  [cyan]Smart playlists detected ({len(smart_detected)}):[/]"
+        )
+        for pl_name, genre in smart_detected:
+            console.print(f"    [dim]{pl_name}[/] -> $GENRE % \"{genre}\"")
 
     console.print()
     console.print("[bold green]Phase 1 done![/]")

@@ -173,8 +173,23 @@ def _run_phase1(xml_path: str, traktor_dir: Path, inject_artworks: bool) -> None
     nml_path = traktor_dir / "collection.nml"
     console.print("[cyan]Writing NML (no cues for Phase 1)...[/]")
     writer = TraktorWriter()
-    writer.write(collection, str(nml_path), include_cues=False)
+    smart_detected: list[tuple[str, str]] = []
+    writer.write(
+        collection,
+        str(nml_path),
+        include_cues=False,
+        smart_playlists=True,
+        smart_detected=smart_detected,
+    )
     console.print(f"  [green]OK[/] {nml_path}")
+    if smart_detected:
+        console.print(
+            f"  [cyan]Smart playlists detected ({len(smart_detected)}):[/]"
+        )
+        for pl_name, genre in smart_detected[:20]:
+            console.print(f"    [dim]{pl_name}[/] -> $GENRE % \"{genre}\"")
+        if len(smart_detected) > 20:
+            console.print(f"    [dim]... and {len(smart_detected) - 20} more[/]")
 
     # Instructions Phase 2
     console.print()

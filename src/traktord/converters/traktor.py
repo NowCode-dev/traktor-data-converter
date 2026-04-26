@@ -184,10 +184,85 @@ def _build_primarykey(track: Track, volume_name: str | None = None) -> str:
     return f"{loc['VOLUME']}{loc['DIR']}{loc['FILE']}"
 
 
+#: Ratio de tracks d'une playlist devant partager le meme genre pour qu'on
+#: la considere comme "smart playlist Genre = X".
+_SMART_GENRE_RATIO_THRESHOLD = 0.95
+
+
+def _detect_genre_smart_match(
+    playlist_name: str,
+    track_paths: list[str],
+    path_to_track: dict[str, Track],
+) -> str | None:
+    """Detecte si une playlist correspond a un filtre genre simple.
+
+    Heuristique : >=95 % des tracks de la playlist ont un genre qui
+    contient le nom de la playlist (ou inversement), apres normalisation
+    case-insensitive (tirets et slashes -> espaces). Permet de capturer
+    les variantes : playlist "Techno" matche "Techno", "Classic Techno",
+    "Techno (Peak Time)", etc.
+
+    Returns:
+        Le nom de la playlist (a utiliser comme base de query Traktor),
+        ou None si la playlist ne match pas la convention.
+    """
+    if not track_paths:
+        return None
+
+    norm_pl = _normalize_genre(playlist_name)
+    if not norm_pl:
+        return None
+
+    matching = 0
+    total = 0
+    for p in track_paths:
+        track = path_to_track.get(p)
+        if not (track and track.genre):
+            continue
+        total += 1
+        norm_g = _normalize_genre(track.genre)
+        if norm_pl in norm_g or norm_g in norm_pl:
+            matching += 1
+
+    if total == 0:
+        return None
+    if matching / total < _SMART_GENRE_RATIO_THRESHOLD:
+        return None
+
+    return playlist_name
+
+
+def _normalize_genre(s: str) -> str:
+    """Normalise un nom de genre / playlist pour la comparaison."""
+    return s.lower().replace("-", " ").replace("/", " ").strip()
+
+
+def _build_smartlist_query(genre: str) -> str:
+    """Construit la query SEARCH_EXPRESSION pour un filtre genre.
+
+    Couvre les variations courantes (avec/sans tiret/espace) en OR.
+    Exemple : `Tech-House` → `$GENRE % "Tech-House" | $GENRE % "Tech House"`.
+    """
+    variants = [genre]
+    if "-" in genre:
+        variants.append(genre.replace("-", " "))
+    elif " " in genre:
+        variants.append(genre.replace(" ", "-"))
+    seen = set()
+    unique = []
+    for v in variants:
+        if v not in seen:
+            seen.add(v)
+            unique.append(v)
+    return " | ".join(f'$GENRE % "{v}"' for v in unique)
+
+
 def _build_playlists(
     collection: Collection,
     path_to_track: dict[str, Track],
     volume_name: str | None = None,
+    smart_playlists: bool = True,
+    smart_detected: list[tuple[str, str]] | None = None,
 ) -> etree._Element:
     """Construire l'arbre <PLAYLISTS> NML.
 
@@ -256,25 +331,40 @@ def _build_playlists(
             child_path = f"{path}/{folder_name}" if path else folder_name
             _write_node(folder_node, child_path)
 
-        # Ecrire les playlists : NODE TYPE="PLAYLIST" > PLAYLIST TYPE="LIST"
+        # Ecrire les playlists : SMARTLIST si convention "Genre = X" detectee,
+        # sinon LIST static avec les tracks listees.
         for list_name, track_paths in playlists:
             playlist_node = etree.SubElement(subnodes, "NODE")
-            playlist_node.set("TYPE", "PLAYLIST")
             playlist_node.set("NAME", list_name)
 
-            valid_entries = [p for p in track_paths if p in path_to_track]
+            detected_genre = None
+            if smart_playlists:
+                detected_genre = _detect_genre_smart_match(
+                    list_name, track_paths, path_to_track
+                )
 
-            playlist_inner = etree.SubElement(playlist_node, "PLAYLIST")
-            playlist_inner.set("ENTRIES", str(len(valid_entries)))
-            playlist_inner.set("TYPE", "LIST")
-            playlist_inner.set("UUID", uuid.uuid4().hex)
-
-            for p in valid_entries:
-                track = path_to_track[p]
-                entry = etree.SubElement(playlist_inner, "ENTRY")
-                pk = etree.SubElement(entry, "PRIMARYKEY")
-                pk.set("TYPE", "TRACK")
-                pk.set("KEY", _build_primarykey(track, volume_name=volume_name))
+            if detected_genre:
+                playlist_node.set("TYPE", "SMARTLIST")
+                smartlist = etree.SubElement(playlist_node, "SMARTLIST")
+                smartlist.set("UUID", uuid.uuid4().hex)
+                search = etree.SubElement(smartlist, "SEARCH_EXPRESSION")
+                search.set("VERSION", "1")
+                search.set("QUERY", _build_smartlist_query(detected_genre))
+                if smart_detected is not None:
+                    smart_detected.append((list_name, detected_genre))
+            else:
+                playlist_node.set("TYPE", "PLAYLIST")
+                valid_entries = [p for p in track_paths if p in path_to_track]
+                playlist_inner = etree.SubElement(playlist_node, "PLAYLIST")
+                playlist_inner.set("ENTRIES", str(len(valid_entries)))
+                playlist_inner.set("TYPE", "LIST")
+                playlist_inner.set("UUID", uuid.uuid4().hex)
+                for p in valid_entries:
+                    track = path_to_track[p]
+                    entry = etree.SubElement(playlist_inner, "ENTRY")
+                    pk = etree.SubElement(entry, "PRIMARYKEY")
+                    pk.set("TYPE", "TRACK")
+                    pk.set("KEY", _build_primarykey(track, volume_name=volume_name))
 
     _write_node(root_node, "")
 
@@ -290,12 +380,20 @@ class TraktorWriter:
         output_path: str,
         volume_name: str | None = None,
         include_cues: bool = True,
+        smart_playlists: bool = True,
+        smart_detected: list[tuple[str, str]] | None = None,
     ) -> None:
         """Ecrire une Collection vers un fichier NML Traktor.
 
         Args:
             include_cues: Si False, omet les CUE_V2 (Phase 1). Traktor fera
                 son analyse propre, puis merge-cues ajoutera les cues en Phase 2.
+            smart_playlists: Si True, detecte les playlists "Genre = X"
+                (>=95 % des tracks meme genre + nom matche) et les ecrit en
+                SMARTLIST plutot que LIST.
+            smart_detected: Si fourni, sera rempli avec les tuples
+                `(playlist_name, genre)` des playlists transformees en
+                SMARTLIST. Utile pour rapport.
         """
         root = etree.Element("NML")
         root.set("VERSION", "19")
@@ -324,7 +422,13 @@ class TraktorWriter:
 
         # PLAYLISTS
         if collection.playlists:
-            playlists_elem = _build_playlists(collection, path_to_track, volume_name=volume_name)
+            playlists_elem = _build_playlists(
+                collection,
+                path_to_track,
+                volume_name=volume_name,
+                smart_playlists=smart_playlists,
+                smart_detected=smart_detected,
+            )
             root.append(playlists_elem)
 
         # Ecrire le fichier
