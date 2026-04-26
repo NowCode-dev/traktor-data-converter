@@ -2,7 +2,7 @@
 
 from lxml import etree
 
-from traktord.models.track import Collection, CuePoint, Track
+from traktord.models.track import PLAYLIST_PATH_SEP, Collection, CuePoint, Track
 from traktord.utils.paths import rekordbox_uri_to_file_path
 
 # Mapping POSITION_MARK Type → CuePoint type
@@ -124,7 +124,7 @@ def _parse_playlists(
                     _walk(child, prefix)
             return
 
-        full_name = f"{prefix}/{name}" if prefix else name
+        full_name = f"{prefix}{PLAYLIST_PATH_SEP}{name}" if prefix else name
 
         if node_type == "1":
             # Playlist

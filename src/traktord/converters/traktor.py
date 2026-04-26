@@ -14,7 +14,7 @@ from datetime import datetime
 
 from lxml import etree
 
-from traktord.models.track import Collection, CuePoint, Track
+from traktord.models.track import PLAYLIST_PATH_SEP, Collection, CuePoint, Track
 from traktord.utils.encoder_delay import get_encoder_delay_ms
 from traktord.utils.keys import classical_to_traktor_key
 from traktord.utils.track_date import get_release_date
@@ -420,17 +420,17 @@ def _build_playlists(
     tree: dict[str, dict] = {"": {"_folders": set(), "_playlists": []}}
 
     for playlist_name, track_paths in collection.playlists.items():
-        parts = playlist_name.split("/")
+        parts = playlist_name.split(PLAYLIST_PATH_SEP)
         if len(parts) == 1:
             tree[""]["_playlists"].append((parts[0], track_paths))
         else:
-            folder = "/".join(parts[:-1])
+            folder = PLAYLIST_PATH_SEP.join(parts[:-1])
             list_name = parts[-1]
 
             for i in range(1, len(parts)):
-                parent_path = "/".join(parts[:i-1]) if i > 1 else ""
+                parent_path = PLAYLIST_PATH_SEP.join(parts[:i-1]) if i > 1 else ""
                 folder_name = parts[i-1]
-                current_path = "/".join(parts[:i])
+                current_path = PLAYLIST_PATH_SEP.join(parts[:i])
 
                 if parent_path not in tree:
                     tree[parent_path] = {"_folders": set(), "_playlists": []}
@@ -456,7 +456,9 @@ def _build_playlists(
             folder_node = etree.SubElement(subnodes, "NODE")
             folder_node.set("TYPE", "FOLDER")
             folder_node.set("NAME", folder_name)
-            child_path = f"{path}/{folder_name}" if path else folder_name
+            child_path = (
+                f"{path}{PLAYLIST_PATH_SEP}{folder_name}" if path else folder_name
+            )
             _write_node(folder_node, child_path)
 
         # Ecrire les playlists : SMARTLIST si convention "Genre = X" detectee,

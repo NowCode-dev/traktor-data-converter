@@ -90,5 +90,6 @@ def test_parse_playlists():
     assert "Favorites" in collection.playlists
     assert len(collection.playlists["Favorites"]) == 2
 
-    assert "Sets/Summer 2024" in collection.playlists
-    assert len(collection.playlists["Sets/Summer 2024"]) == 3
+    nested_key = f"Sets\x00Summer 2024"
+    assert nested_key in collection.playlists
+    assert len(collection.playlists[nested_key]) == 3

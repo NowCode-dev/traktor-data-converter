@@ -70,10 +70,18 @@ class Track(BaseModel):
     extra: dict = {}
 
 
+#: Separateur interne pour les chemins de playlists hierarchises.
+#: On utilise NUL (\x00) car il ne peut pas apparaitre dans un nom de playlist
+#: legitime, ce qui evite l'ambiguite avec les `/` que Rekordbox autorise dans
+#: les noms de playlists (ex: "Electronica / Downtempo" est UN seul nom, pas
+#: deux niveaux de hierarchie).
+PLAYLIST_PATH_SEP = "\x00"
+
+
 class Collection(BaseModel):
     """Une collection complete de morceaux DJ."""
 
     tracks: list[Track] = []
-    playlists: dict[str, list[str]] = {}  # nom -> liste de file_paths
+    playlists: dict[str, list[str]] = {}  # path -> file_paths (cf. PLAYLIST_PATH_SEP)
     source_format: str = ""
     source_file: str = ""

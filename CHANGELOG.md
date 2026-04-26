@@ -4,6 +4,44 @@
 
 ---
 
+## [2026-04-26] — v1.5.1 — Fix slash in playlist names splitting hierarchy
+
+### Resume
+
+Bug fix : les playlists Rekordbox dont le nom contient un `/` (ex.
+"Electronica / Downtempo", "Indie Dance / Nu Disco", "Minimal / Deep tech")
+etaient incorrectement decoupees en plusieurs niveaux de hierarchie.
+Resultat dans Traktor : un dossier "Electronica" contenant une playlist
+"Downtempo", au lieu de la vraie playlist "Electronica / Downtempo".
+
+### Cause
+
+Le parser Rekordbox utilisait `/` comme separateur interne pour serialiser
+les chemins de playlists hierarchises (`"Genres/Tech House"`). Or
+Rekordbox autorise les `/` dans les noms de playlists, ce qui creait une
+ambiguite. Le writer Traktor splittait alors a tort sur ces `/`.
+
+### Fix
+
+Constante `PLAYLIST_PATH_SEP = "\x00"` (NUL byte) introduite dans
+`models/track.py` comme separateur interne. NUL ne peut pas apparaitre
+dans un nom legitime, ce qui leve l'ambiguite. Parser et writer mis a
+jour.
+
+### Modifications
+
+- `src/traktord/models/track.py` — exporte `PLAYLIST_PATH_SEP`
+- `src/traktord/parsers/rekordbox.py` — utilise `PLAYLIST_PATH_SEP`
+- `src/traktord/converters/traktor.py` — utilise `PLAYLIST_PATH_SEP` dans
+  `_build_playlists` (split + join)
+- `tests/test_rekordbox_parser.py` — assertion mise a jour
+
+### Tests
+
+- 128/128 passent.
+
+---
+
 ## [2026-04-26] — v1.5.0 — Smart playlists multi-criteres (Genre OR, Artist, Comment)
 
 ### Resume
