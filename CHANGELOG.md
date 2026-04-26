@@ -4,6 +4,40 @@
 
 ---
 
+## [2026-04-26] — v1.7.0 — Support M4A artwork (covr atom MP4)
+
+### Resume
+
+`inject_artwork` etend le support aux fichiers M4A/MP4/AAC en lisant
+l'atom `covr` MP4 (different du tag ID3 APIC utilise par MP3/AIFF/WAV).
+Apporte le cache Coverart Traktor pour les ~100 M4A typiques d'une biblio
+DJ heritee d'iTunes.
+
+### Modifications
+
+- `src/traktord/utils/trmd.py` :
+  - `_extract_cover_bytes()` (nouveau) : abstraction qui retourne les
+    bytes de la cover + le container_type (`"ID3"` ou `"MP4"`)
+  - `inject_artwork()` refactore : pour les MP3/AIFF/WAV (ID3) ecrit
+    le PRIV:TRAKTOR4 dans le fichier comme avant. Pour les M4A (MP4),
+    ecrit uniquement le cache Coverart (le format MP4 n'a pas
+    d'equivalent PRIV ; Traktor lit le `covr` atom directement pour
+    le deck et notre cache pour le browser thumbnail).
+  - `SUPPORTED_AUDIO_EXTS` etendu : `.m4a`, `.mp4`, `.aac`
+
+### Validation empirique
+
+Test sur `01 Big Fun.m4a` (D.O.N.S, Dave Spoon Remix) du dossier Promo
+& Divers de Lorys : injection reussie, `coverid="016/XVSRCTZ42B..."`,
+cache files ecrits, COVERARTID disponible pour le NML au prochain
+reinject-artworks.
+
+### Tests
+
+- 128/128 passent.
+
+---
+
 ## [2026-04-26] — v1.6.1 — Apply AIFF/WAV support to all entry points
 
 ### Resume

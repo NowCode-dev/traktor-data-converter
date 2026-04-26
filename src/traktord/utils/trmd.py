@@ -610,10 +610,52 @@ def _select_apic(tags) -> Optional[bytes]:
 # Injection dans un MP3
 # ----------------------------------------------------------------------------
 
-#: Extensions de fichier audio dont les tags ID3 (et donc l'APIC) sont
-#: lisibles/ecrivables par mutagen. Utilise par les commandes Phase 1 / init /
-#: reinject-artworks / add-tracks pour filtrer les fichiers compatibles.
-SUPPORTED_AUDIO_EXTS = frozenset({".mp3", ".aiff", ".aif", ".wav"})
+#: Extensions de fichier audio dont l'artwork est lisible par mutagen :
+#: MP3/AIFF/WAV via tag ID3 (APIC frame) + M4A/MP4/AAC via atom MP4 covr.
+#: Utilise par les commandes Phase 1 / init / reinject-artworks / add-tracks.
+SUPPORTED_AUDIO_EXTS = frozenset({".mp3", ".aiff", ".aif", ".wav", ".m4a", ".mp4", ".aac"})
+
+
+def _extract_cover_bytes(file_path: Path) -> tuple[Optional[bytes], object, str]:
+    """Extrait l'artwork d'un fichier audio (MP3/AIFF/WAV/M4A).
+
+    Returns:
+        Tuple `(cover_bytes, audio_obj, container_type)` :
+        - `cover_bytes` : bytes JPEG/PNG de la cover (None si absent)
+        - `audio_obj` : container mutagen pour `.save()` ulterieur
+        - `container_type` : `"ID3"` (MP3/AIFF/WAV) ou `"MP4"` (M4A) ou
+          `""` si le format n'est pas supporte
+    """
+    try:
+        from mutagen import File as MutagenFile
+        from mutagen.id3 import ID3
+        from mutagen.mp4 import MP4
+    except ImportError as e:
+        raise ImportError("mutagen est requis pour l'injection d'artwork") from e
+
+    try:
+        audio = MutagenFile(str(file_path))
+    except Exception:
+        return None, None, ""
+    if audio is None:
+        return None, None, ""
+
+    # Cas 1 : tags ID3 (MP3, AIFF, WAV)
+    tags = getattr(audio, "tags", None)
+    if isinstance(tags, ID3):
+        cover = _select_apic(tags)
+        return cover, audio, "ID3"
+
+    # Cas 2 : container MP4 / M4A
+    if isinstance(audio, MP4):
+        if audio.tags and "covr" in audio.tags:
+            covers = audio.tags["covr"]
+            if covers:
+                # MP4Cover heritie de bytes — on prend la 1ere
+                return bytes(covers[0]), audio, "MP4"
+        return None, audio, "MP4"  # M4A reconnu mais pas de cover
+
+    return None, None, ""
 
 
 def _load_id3_container(file_path: Path):
@@ -650,68 +692,63 @@ def inject_artwork(
     coverart_dir: Optional[Path] = None,
     coverid: Optional[str] = None,
 ) -> Optional[str]:
-    """Injecte l'artwork dans un fichier audio via PRIV:TRAKTOR4 + cache.
+    """Injecte l'artwork d'un fichier audio dans le cache Coverart Traktor.
 
-    Supporte les fichiers a tags ID3 : MP3, AIFF, WAV. Pour les autres
-    formats (FLAC, Opus, etc.) ou les fichiers sans tags ID3, retourne
-    None silencieusement.
+    Supporte :
+    - **MP3/AIFF/WAV** : APIC ID3 → cache + frame PRIV:TRAKTOR4 ecrite dans
+      le fichier (Traktor lit le PRIV pour l'affichage du deck).
+    - **M4A/MP4/AAC** : atom `covr` MP4 → cache uniquement (pas d'equivalent
+      PRIV dans le format MP4 ; Traktor lit le cache Coverart pour le
+      browser et le `covr` atom directement pour le deck).
 
     Pipeline :
-    1. Ouvre le container (MP3 / AIFF / WAV) via mutagen.File
-    2. Selectionne la bonne APIC (cover front en priorite)
-    3. Genere les resolutions Traktor 4 + COVERARTID
-    4. Ecrit la frame PRIV:TRAKTOR4 dans les tags
-    5. Sauve le fichier (preserve la structure du container)
-    6. Ecrit les 3 fichiers cache dans coverart_dir (si fourni)
+    1. Extrait les bytes de la cover via le container approprie
+    2. Genere les 3 resolutions Traktor 4 + COVERARTID
+    3. Pour ID3 : ecrit la frame PRIV:TRAKTOR4 + sauve le fichier
+       Pour MP4 : pas de PRIV (le format ne le supporte pas)
+    4. Ecrit les 3 fichiers cache dans coverart_dir (si fourni)
 
     Args:
-        file_path: Chemin vers le fichier audio (MP3 / AIFF / WAV).
+        file_path: Chemin vers le fichier audio.
         coverart_dir: Dossier Coverart/ de Traktor. Si None, seule la
-            frame PRIV est ecrite (pas de cache files).
+            frame PRIV est ecrite (MP3/AIFF/WAV) ou rien (M4A).
         coverid: COVERARTID a utiliser. Si None, genere automatiquement
-            depuis l'APIC.
+            depuis la cover.
 
     Returns:
-        Le COVERARTID utilise, ou None si aucune APIC trouvee ou si le
+        Le COVERARTID utilise, ou None si aucune cover trouvee ou si le
         format n'est pas supporte.
     """
     from mutagen.id3 import PRIV
 
-    tags, audio = _load_id3_container(file_path)
-    if tags is None or audio is None:
+    cover_data, audio, container_type = _extract_cover_bytes(file_path)
+    if cover_data is None:
         return None
 
-    # Selectionner la bonne APIC (cover front en priorite)
-    apic_data = _select_apic(tags)
-    if apic_data is None:
-        return None
-
-    # Generer le COVERARTID si pas fourni
     if coverid is None:
-        coverid = generate_coverid(apic_data)
+        coverid = generate_coverid(cover_data)
 
-    # Generer les 3 resolutions Traktor 4
-    res_125, res_75, res_56 = generate_coverart_resolutions_t4(apic_data)
+    res_125, res_75, res_56 = generate_coverart_resolutions_t4(cover_data)
 
-    # Construire le blob TRMD avec l'image principale (125x125)
-    trmd_blob = build_minimal_trmd(coverid, res_125)
+    if container_type == "ID3":
+        # MP3 / AIFF / WAV : ecrire la frame PRIV:TRAKTOR4 dans le fichier
+        trmd_blob = build_minimal_trmd(coverid, res_125)
+        tags = audio.tags
 
-    # Supprimer l'ancienne frame PRIV:TRAKTOR4 si presente
-    to_remove = []
-    for key, frame in tags.items():
-        if frame.FrameID == "PRIV" and getattr(frame, "owner", "") == PRIV_OWNER:
-            to_remove.append(key)
-    for key in to_remove:
-        del tags[key]
+        to_remove = []
+        for key, frame in tags.items():
+            if frame.FrameID == "PRIV" and getattr(frame, "owner", "") == PRIV_OWNER:
+                to_remove.append(key)
+        for key in to_remove:
+            del tags[key]
 
-    # Ajouter la nouvelle frame PRIV
-    tags.add(PRIV(owner=PRIV_OWNER, data=trmd_blob))
+        tags.add(PRIV(owner=PRIV_OWNER, data=trmd_blob))
+        audio.save()
 
-    # Sauve via le container : pour MP3, AIFF, WAV, mutagen preserve la
-    # structure du fichier (chunks AIFF, RIFF WAV, header MP3).
-    audio.save()
+    # MP4 : pas de PRIV equivalent, on ne touche pas au fichier audio.
+    # Le cache Coverart suffit pour le browser ; Traktor lira le `covr`
+    # atom directement pour l'affichage du deck.
 
-    # Ecrire les fichiers cache si le dossier est fourni
     if coverart_dir is not None:
         write_coverart_files(coverart_dir, coverid, (res_125, res_75, res_56))
 
