@@ -186,8 +186,8 @@ def _run_phase1(xml_path: str, traktor_dir: Path, inject_artworks: bool) -> None
         console.print(
             f"  [cyan]Smart playlists detected ({len(smart_detected)}):[/]"
         )
-        for pl_name, genre in smart_detected[:20]:
-            console.print(f"    [dim]{pl_name}[/] -> $GENRE % \"{genre}\"")
+        for pl_name, query in smart_detected[:20]:
+            console.print(f"    [dim]{pl_name}[/] -> {query}")
         if len(smart_detected) > 20:
             console.print(f"    [dim]... and {len(smart_detected) - 20} more[/]")
 

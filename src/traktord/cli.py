@@ -346,8 +346,8 @@ def init(source: str, traktor_dir: str | None, no_artwork: bool, smart_playlists
         console.print(
             f"  [cyan]Smart playlists detected ({len(smart_detected)}):[/]"
         )
-        for pl_name, genre in smart_detected:
-            console.print(f"    [dim]{pl_name}[/] -> $GENRE % \"{genre}\"")
+        for pl_name, query in smart_detected:
+            console.print(f"    [dim]{pl_name}[/] -> {query}")
 
     console.print()
     console.print("[bold green]Phase 1 done![/]")

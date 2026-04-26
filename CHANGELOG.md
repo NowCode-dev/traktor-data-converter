@@ -4,6 +4,61 @@
 
 ---
 
+## [2026-04-26] — v1.5.0 — Smart playlists multi-criteres (Genre OR, Artist, Comment)
+
+### Resume
+
+Detection des smart playlists etendue a 3 dimensions, avec multi-valeurs
+en OR :
+- **Genre OR** : top 1-3 genres distincts couvrant 95 % (au lieu d'un
+  seul) — capture les playlists "Breaks" qui combinent "Breaks",
+  "Breaks / Breakbeat / UK Bass", "Drum & Bass"
+- **Artist OR** : top 1-3 artistes couvrant 95 % — capture
+  "Sebastien Leger" avec les variantes featuring
+- **Comment-tag** : 95 %+ des tracks ont un mot du nom playlist dans
+  leur Comment — capture "Soft Track", "Hit Track", etc. (les playlists
+  qui filtrent sur les tags Lorys ecrits dans Comments)
+
+### Validation empirique
+
+Sur l'export reel (5511 tracks, 136 playlists) :
+- **V1.4** : 16 smart playlists detectees
+- **V1.5** : 29 smart playlists detectees (+13)
+  - 18 GENRE
+  - 6 ARTIST
+  - 5 COMMENT
+
+Tous les patterns identifies par Lorys sont captures (Breaks, Dance,
+Minimal/Deep tech, Sebastien Leger, Soft Track).
+
+### Modifications
+
+- `src/traktord/converters/traktor.py` :
+  - `_detect_smart_match()` (refacto) — cascade GENRE -> ARTIST -> COMMENT,
+    retourne `(field, values)` pour multi-valeurs
+  - `_detect_dimension_match()` (nouveau) — accumulation top-N jusqu'a
+    couverture 95 % avec garde-fou anti-faux-positif (au moins une valeur
+    matche le nom de la playlist)
+  - `_detect_comment_tag_match()` (nouveau) — recherche d'un token (>=3
+    chars, hors stoplist) du nom playlist dans 95 %+ des Comments
+  - `_build_smartlist_query()` accepte field + multi-values
+- `src/traktord/cli.py` + `src/traktord/gui.py` — affichent la query
+  complete dans le rapport (au lieu de juste le genre)
+- `tests/test_smart_playlists.py` — etendu a 17 tests (les 3 strategies)
+
+### Limites connues (V2 future)
+
+V1.5 ne gere que des criteres OR sur une seule dimension. Pour les smart
+playlists Rekordbox avec criteres AND/multi-dimension complexes
+(genre AND BPM range AND rating), il faudra V2 = lecture de
+`master.db` Rekordbox via `pyrekordbox`.
+
+### Tests
+
+- 128/128 passent (5 nouveaux + 12 mis a jour vs ancienne API).
+
+---
+
 ## [2026-04-26] — v1.4.0 — Smart playlists "Genre = X" auto-detectees
 
 ### Resume

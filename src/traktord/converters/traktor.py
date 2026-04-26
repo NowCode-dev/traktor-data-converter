@@ -189,22 +189,40 @@ def _build_primarykey(track: Track, volume_name: str | None = None) -> str:
 _SMART_GENRE_RATIO_THRESHOLD = 0.95
 
 
-def _detect_genre_smart_match(
+#: Tokens trop generiques pour servir de filtre Comment (faux positifs).
+_COMMENT_TOKEN_STOPLIST = {
+    "the", "a", "an", "of", "for", "and", "or", "by", "with",
+    "mix", "original", "remix", "edit", "version",
+    "track", "song", "list", "playlist", "music",
+}
+
+#: Longueur minimale d'un token de nom de playlist pour servir de filtre Comment.
+_COMMENT_TOKEN_MIN_LEN = 3
+
+
+def _normalize_genre(s: str) -> str:
+    """Normalise un nom de genre / playlist pour la comparaison."""
+    return s.lower().replace("-", " ").replace("/", " ").strip()
+
+
+def _detect_smart_match(
     playlist_name: str,
     track_paths: list[str],
     path_to_track: dict[str, Track],
-) -> str | None:
-    """Detecte si une playlist correspond a un filtre genre simple.
+) -> tuple[str, list[str]] | None:
+    """Detecte si une playlist correspond a un filtre simple sur une dimension.
 
-    Heuristique : >=95 % des tracks de la playlist ont un genre qui
-    contient le nom de la playlist (ou inversement), apres normalisation
-    case-insensitive (tirets et slashes -> espaces). Permet de capturer
-    les variantes : playlist "Techno" matche "Techno", "Classic Techno",
-    "Techno (Peak Time)", etc.
+    Cascade de strategies (premiere qui match) :
+        1. Genre OR : top 1-3 genres distincts couvrent >=95 % de la
+           playlist, et au moins un d'entre eux matche le nom de la playlist
+        2. Artist OR : pareil sur Artist
+        3. Comment-tag : >=95 % des tracks ont un Comment qui contient
+           un token (>=3 chars, hors stoplist) du nom de la playlist
 
     Returns:
-        Le nom de la playlist (a utiliser comme base de query Traktor),
-        ou None si la playlist ne match pas la convention.
+        Tuple `(field, values)` ou `field` est `"GENRE"`, `"ARTIST"` ou
+        `"COMMENT"`, et `values` est la liste des valeurs a matcher en OR.
+        None si aucune strategie ne match.
     """
     if not track_paths:
         return None
@@ -213,48 +231,158 @@ def _detect_genre_smart_match(
     if not norm_pl:
         return None
 
-    matching = 0
+    tracks = [path_to_track[p] for p in track_paths if p in path_to_track]
+    if not tracks:
+        return None
+
+    # Strategie 1 : Genre OR
+    g_match = _detect_dimension_match(
+        tracks=tracks,
+        attr="genre",
+        playlist_norm=norm_pl,
+    )
+    if g_match:
+        return ("GENRE", g_match)
+
+    # Strategie 2 : Artist OR
+    a_match = _detect_dimension_match(
+        tracks=tracks,
+        attr="artist",
+        playlist_norm=norm_pl,
+    )
+    if a_match:
+        return ("ARTIST", a_match)
+
+    # Strategie 3 : Comment-tag (substring du nom playlist)
+    c_match = _detect_comment_tag_match(tracks, playlist_name)
+    if c_match:
+        return ("COMMENT", [c_match])
+
+    return None
+
+
+def _detect_dimension_match(
+    tracks: list[Track],
+    attr: str,
+    playlist_norm: str,
+) -> list[str] | None:
+    """Detecte un OR sur 1-3 valeurs de `attr` (genre ou artist) couvrant >=95 %.
+
+    Verifie egalement qu'au moins UNE des valeurs retenues matche le nom
+    de la playlist (substring normalise) — anti-faux-positif.
+    """
+    from collections import Counter
+
+    counter: Counter = Counter()
     total = 0
-    for p in track_paths:
-        track = path_to_track.get(p)
-        if not (track and track.genre):
-            continue
-        total += 1
-        norm_g = _normalize_genre(track.genre)
-        if norm_pl in norm_g or norm_g in norm_pl:
-            matching += 1
+    for t in tracks:
+        v = getattr(t, attr, "") or ""
+        v = v.strip()
+        if v:
+            counter[v] += 1
+            total += 1
 
     if total == 0:
         return None
-    if matching / total < _SMART_GENRE_RATIO_THRESHOLD:
+
+    # Cumul du plus frequent au moins frequent
+    threshold = total * _SMART_GENRE_RATIO_THRESHOLD
+    cumulative = 0
+    selected: list[str] = []
+    for value, count in counter.most_common(3):
+        selected.append(value)
+        cumulative += count
+        if cumulative >= threshold:
+            break
+
+    if cumulative < threshold:
         return None
 
-    return playlist_name
+    # Anti-faux-positif : au moins une valeur doit matcher le nom playlist
+    has_name_match = False
+    for v in selected:
+        norm_v = _normalize_genre(v)
+        if playlist_norm in norm_v or norm_v in playlist_norm:
+            has_name_match = True
+            break
+
+    if not has_name_match:
+        return None
+
+    return selected
 
 
-def _normalize_genre(s: str) -> str:
-    """Normalise un nom de genre / playlist pour la comparaison."""
-    return s.lower().replace("-", " ").replace("/", " ").strip()
+def _detect_comment_tag_match(
+    tracks: list[Track],
+    playlist_name: str,
+) -> str | None:
+    """Detecte un tag commun (substring) dans les Comments des tracks.
 
-
-def _build_smartlist_query(genre: str) -> str:
-    """Construit la query SEARCH_EXPRESSION pour un filtre genre.
-
-    Couvre les variations courantes (avec/sans tiret/espace) en OR.
-    Exemple : `Tech-House` → `$GENRE % "Tech-House" | $GENRE % "Tech House"`.
+    Pour chaque token (>=3 chars, hors stoplist) du nom de la playlist,
+    compte la proportion de tracks dont le Comment contient ce token
+    (case-insensitive). Retourne le 1er token couvrant >=95 % des tracks.
     """
-    variants = [genre]
-    if "-" in genre:
-        variants.append(genre.replace("-", " "))
-    elif " " in genre:
-        variants.append(genre.replace(" ", "-"))
-    seen = set()
-    unique = []
-    for v in variants:
-        if v not in seen:
-            seen.add(v)
-            unique.append(v)
-    return " | ".join(f'$GENRE % "{v}"' for v in unique)
+    tokens = [
+        t for t in _normalize_genre(playlist_name).split()
+        if len(t) >= _COMMENT_TOKEN_MIN_LEN and t not in _COMMENT_TOKEN_STOPLIST
+    ]
+    if not tokens:
+        return None
+
+    total_with_comment = sum(1 for t in tracks if (t.comment or "").strip())
+    if total_with_comment == 0:
+        return None
+    threshold = total_with_comment * _SMART_GENRE_RATIO_THRESHOLD
+
+    for token in tokens:
+        matching = sum(
+            1 for t in tracks
+            if token in (t.comment or "").lower()
+        )
+        if matching >= threshold:
+            # Retrouve la casse originale (titre case) pour la query Traktor
+            return next(
+                (
+                    word for word in playlist_name.split()
+                    if word.lower() == token
+                ),
+                token,
+            )
+
+    return None
+
+
+def _build_smartlist_query(field: str, values: list[str]) -> str:
+    """Construit la query SEARCH_EXPRESSION Traktor pour un filtre OR.
+
+    Args:
+        field: `"GENRE"`, `"ARTIST"` ou `"COMMENT"`.
+        values: Valeurs a matcher en OR. Pour GENRE, on ajoute aussi les
+            variantes tiret <-> espace pour chaque valeur.
+
+    Exemple :
+        _build_smartlist_query("GENRE", ["Tech-House"])
+        -> '$GENRE % "Tech-House" | $GENRE % "Tech House"'
+    """
+    field_token = f"${field}"
+    expanded: list[str] = []
+    seen: set[str] = set()
+    for v in values:
+        for variant in _expand_variants(v) if field == "GENRE" else [v]:
+            if variant not in seen:
+                seen.add(variant)
+                expanded.append(variant)
+    return " | ".join(f'{field_token} % "{v}"' for v in expanded)
+
+
+def _expand_variants(value: str) -> list[str]:
+    """Genere des variantes tiret <-> espace pour un genre."""
+    variants = [value]
+    if "-" in value:
+        variants.append(value.replace("-", " "))
+    elif " " in value:
+        variants.append(value.replace(" ", "-"))
+    return variants
 
 
 def _build_playlists(
@@ -337,21 +465,23 @@ def _build_playlists(
             playlist_node = etree.SubElement(subnodes, "NODE")
             playlist_node.set("NAME", list_name)
 
-            detected_genre = None
+            detected = None
             if smart_playlists:
-                detected_genre = _detect_genre_smart_match(
+                detected = _detect_smart_match(
                     list_name, track_paths, path_to_track
                 )
 
-            if detected_genre:
+            if detected:
+                field, values = detected
+                query = _build_smartlist_query(field, values)
                 playlist_node.set("TYPE", "SMARTLIST")
                 smartlist = etree.SubElement(playlist_node, "SMARTLIST")
                 smartlist.set("UUID", uuid.uuid4().hex)
                 search = etree.SubElement(smartlist, "SEARCH_EXPRESSION")
                 search.set("VERSION", "1")
-                search.set("QUERY", _build_smartlist_query(detected_genre))
+                search.set("QUERY", query)
                 if smart_detected is not None:
-                    smart_detected.append((list_name, detected_genre))
+                    smart_detected.append((list_name, query))
             else:
                 playlist_node.set("TYPE", "PLAYLIST")
                 valid_entries = [p for p in track_paths if p in path_to_track]
