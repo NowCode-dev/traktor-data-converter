@@ -488,11 +488,16 @@ def main() -> None:
         console.print("[cyan]Searching missing artworks...[/]")
         stats = find_missing_artworks(collection, nml_path)
 
+        by_src = stats.get("found_by_source", {})
         console.print()
         console.print(Panel(
             f"Tested              : {stats['tested']}\n"
             f"Already had cover   : [dim]{stats['already_had_cover']}[/]\n"
-            f"Found via iTunes    : [green]{stats['found_external']}[/]\n"
+            f"Found online        : [green]{stats['found_external']}[/]\n"
+            f"  via Beatport      : [green]{by_src.get('beatport', 0)}[/]\n"
+            f"  via Discogs       : [green]{by_src.get('discogs', 0)}[/]\n"
+            f"  via MusicBrainz   : [green]{by_src.get('musicbrainz', 0)}[/]\n"
+            f"  via iTunes        : [green]{by_src.get('itunes', 0)}[/]\n"
             f"Not found online    : [yellow]{stats['not_found']}[/]\n"
             f"Errors              : [red]{stats['errors']}[/]\n"
             f"NML entries updated : [green]{stats['nml_updated']}[/]\n\n"

@@ -4,6 +4,41 @@
 
 ---
 
+## [2026-04-26] — v1.9.1 — Stats par source dans find_missing_artworks
+
+### Resume
+
+Apres test V1.9.0 par Lorys (5500 tracks, 690 trouves online), le label
+GUI disait encore "Found via iTunes" alors que la majorite vient en
+realite de Beatport / Discogs. Patch cosmetique :
+
+- Renomme `Found via iTunes` -> `Found online` dans la GUI
+- Ajoute la ventilation par source : Beatport / Discogs / MusicBrainz / iTunes
+- `find_cover_cascade` retourne maintenant `tuple[bytes | None, source | None]`
+  pour permettre le tracking par source
+- `find_missing_artworks` retourne un nouveau champ `found_by_source`
+  (dict {beatport, discogs, musicbrainz, itunes})
+
+### Modifications
+
+- `src/traktord/utils/artwork_search.py` :
+  `find_cover_cascade` retourne `tuple[Optional[bytes], Optional[str]]`.
+  Le 2e element est le nom de la source qui a matche.
+- `src/traktord/merge_cues.py` :
+  `find_missing_artworks` tracke `found_by_source` et l'ajoute aux stats.
+- `src/traktord/gui.py` :
+  Panel de l'option 7 affiche maintenant le breakdown par source.
+- `tests/test_artwork_search.py` :
+  Adaptation au nouveau type de retour (25 tests passent).
+
+### Breaking change
+
+L'API de `find_cover_cascade` change : retour `tuple` au lieu de `bytes`.
+Code externe qui consomme directement la fonction doit etre mis a jour.
+Pas de consommateurs externes connus a ce stade.
+
+---
+
 ## [2026-04-26] — v1.9.0 — Find missing artworks : cascade multi-sources
 
 ### Resume

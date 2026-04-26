@@ -110,7 +110,7 @@ class TestCascadeOrder:
              patch.object(artwork_search, "_search_itunes") as mock_it:
             result = find_cover_cascade("DAETOR", "No Hiding", file_path=file_path)
 
-        assert result == beatport_bytes
+        assert result == (beatport_bytes, "beatport")
         mock_bp.assert_called_once()
         mock_dc.assert_not_called()
         mock_mb.assert_not_called()
@@ -127,7 +127,7 @@ class TestCascadeOrder:
              patch.object(artwork_search, "_search_itunes") as mock_it:
             result = find_cover_cascade("Artist", "Title", file_path=file_path)
 
-        assert result == discogs_bytes
+        assert result == (discogs_bytes, "discogs")
         mock_dc.assert_called_once()
         mock_mb.assert_not_called()
         mock_it.assert_not_called()
@@ -143,7 +143,7 @@ class TestCascadeOrder:
              patch.object(artwork_search, "_search_itunes") as mock_it:
             result = find_cover_cascade("Artist", "Title", file_path=file_path)
 
-        assert result == mb_bytes
+        assert result == (mb_bytes, "musicbrainz")
         mock_mb.assert_called_once()
         mock_it.assert_not_called()
 
@@ -158,7 +158,7 @@ class TestCascadeOrder:
              patch.object(artwork_search, "_search_itunes", return_value=itunes_bytes) as mock_it:
             result = find_cover_cascade("Artist", "Title", file_path=file_path)
 
-        assert result == itunes_bytes
+        assert result == (itunes_bytes, "itunes")
         mock_it.assert_called_once()
 
     def test_returns_none_when_all_sources_miss(self, tmp_path):
@@ -171,7 +171,7 @@ class TestCascadeOrder:
              patch.object(artwork_search, "_search_itunes", return_value=None):
             result = find_cover_cascade("Artist", "Title", file_path=file_path)
 
-        assert result is None
+        assert result == (None, None)
 
     def test_skips_beatport_id_when_no_file_path(self):
         """Sans file_path, on saute l'extraction TrackID."""
@@ -181,14 +181,14 @@ class TestCascadeOrder:
              patch.object(artwork_search, "_search_itunes") as mock_it:
             result = find_cover_cascade("Artist", "Title", file_path=None)
 
-        assert result == b"OK"
+        assert result == (b"OK", "discogs")
         mock_bp.assert_not_called()
         mock_dc.assert_called_once()
 
     def test_returns_none_for_empty_artist_or_title(self):
         # Pas de query possible si artist ou title vide ET pas de file_path.
-        assert find_cover_cascade("", "Title") is None
-        assert find_cover_cascade("Artist", "") is None
+        assert find_cover_cascade("", "Title") == (None, None)
+        assert find_cover_cascade("Artist", "") == (None, None)
 
 
 # ---------------------------------------------------------------------------

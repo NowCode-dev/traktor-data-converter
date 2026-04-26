@@ -497,6 +497,7 @@ def find_missing_artworks(
 
     Returns:
         Dict stats : `tested`, `already_had_cover`, `found_external`,
+        `found_by_source` (dict {beatport, discogs, musicbrainz, itunes}),
         `not_found`, `errors`, `nml_updated`, `backup`.
     """
     from rich.progress import (
@@ -518,6 +519,9 @@ def find_missing_artworks(
 
     tested = already = found = not_found = errors = 0
     new_path_to_coverid: dict[str, str] = {}
+    found_by_source: dict[str, int] = {
+        "beatport": 0, "discogs": 0, "musicbrainz": 0, "itunes": 0,
+    }
 
     total = len(rekordbox_collection.tracks)
     with Progress(
@@ -548,7 +552,7 @@ def find_missing_artworks(
                     progress.advance(task)
                     continue
 
-                cover_bytes = find_cover_cascade(
+                cover_bytes, source = find_cover_cascade(
                     track.artist, track.title, file_path=file_path
                 )
                 if not cover_bytes:
@@ -562,6 +566,8 @@ def find_missing_artworks(
                 if new_coverid:
                     new_path_to_coverid[file_path.name] = new_coverid
                     found += 1
+                    if source in found_by_source:
+                        found_by_source[source] += 1
                 else:
                     errors += 1
             except Exception:
@@ -599,6 +605,7 @@ def find_missing_artworks(
         "tested": tested,
         "already_had_cover": already,
         "found_external": found,
+        "found_by_source": found_by_source,
         "not_found": not_found,
         "errors": errors,
         "nml_updated": nml_updated,

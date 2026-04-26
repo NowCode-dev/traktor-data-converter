@@ -88,7 +88,7 @@ def find_cover_cascade(
     file_path: Optional[Path] = None,
     discogs_token: Optional[str] = None,
     threshold: float = _MATCH_SCORE_THRESHOLD,
-) -> Optional[bytes]:
+) -> tuple[Optional[bytes], Optional[str]]:
     """Cascade multi-sources pour trouver une cover en ligne.
 
     Ordre teste : Beatport (TrackID filename) -> Discogs -> MusicBrainz/CAA
@@ -105,7 +105,9 @@ def find_cover_cascade(
         threshold: Score minimum pour accepter un match fuzzy (0.0-1.0).
 
     Returns:
-        Bytes de la cover (JPEG generalement) si trouvee, sinon None.
+        Tuple `(bytes, source)` ou `source` est l'une des chaines
+        `"beatport"`, `"discogs"`, `"musicbrainz"`, `"itunes"`. Si aucune
+        source ne trouve, retourne `(None, None)`.
     """
     if discogs_token is None:
         discogs_token = os.environ.get("DISCOGS_TOKEN")
@@ -115,27 +117,27 @@ def find_cover_cascade(
     if file_path is not None:
         cover = _search_beatport_id(file_path)
         if cover:
-            return cover
+            return cover, "beatport"
 
     if not artist.strip() or not title.strip():
-        return None
+        return None, None
 
     # 2. Discogs
     cover = _search_discogs(artist, title, discogs_token, threshold)
     if cover:
-        return cover
+        return cover, "discogs"
 
     # 3. MusicBrainz + Cover Art Archive
     cover = _search_musicbrainz(artist, title, threshold)
     if cover:
-        return cover
+        return cover, "musicbrainz"
 
     # 4. iTunes (V1.8.0 logic)
     cover = _search_itunes(artist, title, threshold)
     if cover:
-        return cover
+        return cover, "itunes"
 
-    return None
+    return None, None
 
 
 def search_itunes_cover(
