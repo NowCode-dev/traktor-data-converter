@@ -489,10 +489,11 @@ def find_missing_artworks(
     """Cherche en ligne les covers manquantes et les injecte.
 
     Pour chaque track de la collection Rekordbox dont le fichier audio n'a
-    PAS de cover embedded (APIC ID3 ou covr MP4 absent), interroge l'API
-    iTunes Search avec artist + title. Si match suffisant trouve, telecharge
-    la cover HD, l'injecte dans le fichier audio + cache Coverart, et met
-    a jour le COVERARTID dans le NML.
+    PAS de cover embedded (APIC ID3 ou covr MP4 absent), interroge en cascade
+    plusieurs APIs externes (Beatport TrackID, Discogs, MusicBrainz/CAA,
+    iTunes). Si match suffisant trouve, telecharge la cover HD, l'injecte
+    dans le fichier audio + cache Coverart, et met a jour le COVERARTID
+    dans le NML.
 
     Returns:
         Dict stats : `tested`, `already_had_cover`, `found_external`,
@@ -503,7 +504,7 @@ def find_missing_artworks(
         TextColumn, TimeElapsedColumn, TimeRemainingColumn,
     )
 
-    from .utils.artwork_search import search_itunes_cover
+    from .utils.artwork_search import find_cover_cascade
     from .utils.trmd import (
         SUPPORTED_AUDIO_EXTS, _extract_cover_bytes, inject_external_cover,
     )
@@ -547,7 +548,9 @@ def find_missing_artworks(
                     progress.advance(task)
                     continue
 
-                cover_bytes = search_itunes_cover(track.artist, track.title)
+                cover_bytes = find_cover_cascade(
+                    track.artist, track.title, file_path=file_path
+                )
                 if not cover_bytes:
                     not_found += 1
                     progress.advance(task)

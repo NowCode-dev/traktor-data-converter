@@ -4,6 +4,70 @@
 
 ---
 
+## [2026-04-26] — v1.9.0 — Find missing artworks : cascade multi-sources
+
+### Resume
+
+V1.8.0 cherchait uniquement sur iTunes. Sur la biblio underground techno
+de Lorys (Beatport), iTunes ne match que ~3-4% des tracks (44/1240 lors
+du run de test). V1.9.0 introduit une cascade ordonnee de 4 sources qui
+visent specifiquement le catalogue electronique :
+
+1. **Beatport via TrackID** extrait du filename (`(MM-YYYY)-(ID)_artist-title-mix-label`)
+   — rapide et fiable pour les achats Beatport recents. Scrape passif
+   du tag og:image sur la page produit (HD 1400x1400 directement).
+2. **Discogs** via API publique (sans token, ou token user gratuit via
+   env var `DISCOGS_TOKEN` pour rate limit 60 req/min au lieu de 25).
+   Recherche release + fetch detail pour recuperer l'image primary.
+3. **MusicBrainz + Cover Art Archive** : MBID release recupere via
+   l'API MB (rate limit 1 req/s respecte), puis fetch CAA front-1200.
+4. **iTunes** : fallback final pour la pop / commercial (logique V1.8.0
+   preservee, factorisee dans `_search_itunes`).
+
+Premier match >= seuil de confiance (0.7) gagne. Beatport TrackID
+est pris sans fuzzy match (le TrackID est deterministe).
+
+### Modifications
+
+- `src/traktord/utils/artwork_search.py` :
+  - `find_cover_cascade(artist, title, file_path=None, discogs_token=None)`
+    nouvelle API publique
+  - `_search_beatport_id(file_path)` extrait le TrackID via regex et
+    fetch og:image
+  - `_search_discogs(artist, title, token, threshold)` cherche release,
+    fetch detail, prend image primary
+  - `_search_musicbrainz(artist, title, threshold)` cherche recording,
+    suit jusqu'a 3 releases, fetch CAA front
+  - `_search_itunes(artist, title, threshold)` factorise la logique V1.8.0
+  - `_mb_http_json` applique un rate limit 1 req/s pour MusicBrainz
+  - `search_itunes_cover` conservee pour compat
+- `src/traktord/merge_cues.py` :
+  - `find_missing_artworks` utilise `find_cover_cascade` au lieu de
+    `search_itunes_cover` et passe `file_path` pour permettre l'extraction
+    Beatport TrackID
+- `tests/test_artwork_search.py` (nouveau) : 25 tests sur regex Beatport,
+  fuzzy match, ordre de cascade, court-circuit, resolution token
+
+### Limitations
+
+- **Beatport via recherche par nom** non implemente : la page de search
+  est rendue cote client (CSR Next.js, pas dans le SSR), et l'API publique
+  Beatport requiert OAuth. Fallback : pour les anciens fichiers sans
+  TrackID dans le filename, on s'appuie sur Discogs et MusicBrainz.
+- **Discogs sans token** = 25 req/min. Pour acceler sur 1000+ tracks,
+  creer un token user (gratuit) sur `https://www.discogs.com/settings/developers`
+  et le passer via env var `DISCOGS_TOKEN`.
+- **Tracks tres recents (juillet 2025+)** souvent inconnus de Discogs
+  et MusicBrainz. La source 1 (Beatport TrackID) couvre ce cas.
+
+### Tests
+
+- 153/153 passent (128 existants + 25 nouveaux dans test_artwork_search).
+- Test live valide : Beatport TrackID `20629038` (DAETOR — No Hiding,
+  Eastenderz) telecharge 152 KB d'image HD.
+
+---
+
 ## [2026-04-26] — v1.8.0 — Find missing artworks online (iTunes Search API)
 
 ### Resume
