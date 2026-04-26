@@ -482,6 +482,127 @@ def add_new_tracks(
     }
 
 
+def find_missing_artworks(
+    rekordbox_collection: Collection,
+    traktor_nml_path: Path,
+) -> dict:
+    """Cherche en ligne les covers manquantes et les injecte.
+
+    Pour chaque track de la collection Rekordbox dont le fichier audio n'a
+    PAS de cover embedded (APIC ID3 ou covr MP4 absent), interroge l'API
+    iTunes Search avec artist + title. Si match suffisant trouve, telecharge
+    la cover HD, l'injecte dans le fichier audio + cache Coverart, et met
+    a jour le COVERARTID dans le NML.
+
+    Returns:
+        Dict stats : `tested`, `already_had_cover`, `found_external`,
+        `not_found`, `errors`, `nml_updated`, `backup`.
+    """
+    from rich.progress import (
+        BarColumn, MofNCompleteColumn, Progress, SpinnerColumn,
+        TextColumn, TimeElapsedColumn, TimeRemainingColumn,
+    )
+
+    from .utils.artwork_search import search_itunes_cover
+    from .utils.trmd import (
+        SUPPORTED_AUDIO_EXTS, _extract_cover_bytes, inject_external_cover,
+    )
+
+    if not traktor_nml_path.exists():
+        raise FileNotFoundError(f"Collection Traktor introuvable : {traktor_nml_path}")
+
+    backup = _backup_nml(traktor_nml_path)
+    coverart_dir = traktor_nml_path.parent / "Coverart"
+    coverart_dir.mkdir(exist_ok=True)
+
+    tested = already = found = not_found = errors = 0
+    new_path_to_coverid: dict[str, str] = {}
+
+    total = len(rekordbox_collection.tracks)
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TextColumn("•"),
+        TimeElapsedColumn(),
+        TextColumn("•"),
+        TimeRemainingColumn(),
+    ) as progress:
+        task = progress.add_task("Searching missing artworks", total=total)
+        for track in rekordbox_collection.tracks:
+            file_path = Path(track.file_path)
+            if (
+                not file_path.exists()
+                or file_path.suffix.lower() not in SUPPORTED_AUDIO_EXTS
+            ):
+                progress.advance(task)
+                continue
+
+            tested += 1
+            try:
+                existing, _, _ = _extract_cover_bytes(file_path)
+                if existing:
+                    already += 1
+                    progress.advance(task)
+                    continue
+
+                cover_bytes = search_itunes_cover(track.artist, track.title)
+                if not cover_bytes:
+                    not_found += 1
+                    progress.advance(task)
+                    continue
+
+                new_coverid = inject_external_cover(
+                    file_path, cover_bytes, coverart_dir
+                )
+                if new_coverid:
+                    new_path_to_coverid[file_path.name] = new_coverid
+                    found += 1
+                else:
+                    errors += 1
+            except Exception:
+                errors += 1
+            progress.advance(task)
+
+    # Mise a jour du NML pour les COVERARTID nouvellement injectes
+    nml_updated = 0
+    if new_path_to_coverid:
+        tree = etree.parse(str(traktor_nml_path))
+        root = tree.getroot()
+        collection_elem = root.find("COLLECTION")
+        if collection_elem is not None:
+            for entry in collection_elem.findall("ENTRY"):
+                location = entry.find("LOCATION")
+                if location is None:
+                    continue
+                fname = location.get("FILE", "")
+                new_cid = new_path_to_coverid.get(fname)
+                if not new_cid:
+                    continue
+                info = entry.find("INFO")
+                if info is None:
+                    continue
+                info.set("COVERARTID", new_cid)
+                nml_updated += 1
+            tree.write(
+                str(traktor_nml_path),
+                xml_declaration=True,
+                encoding="UTF-8",
+                pretty_print=True,
+            )
+
+    return {
+        "tested": tested,
+        "already_had_cover": already,
+        "found_external": found,
+        "not_found": not_found,
+        "errors": errors,
+        "nml_updated": nml_updated,
+        "backup": backup,
+    }
+
+
 def cleanup_duplicates(traktor_nml_path: Path) -> dict:
     """Nettoie les entrees dupliquees dans la collection.nml Traktor.
 

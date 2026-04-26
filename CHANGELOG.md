@@ -4,6 +4,45 @@
 
 ---
 
+## [2026-04-26] — v1.8.0 — Find missing artworks online (iTunes Search API)
+
+### Resume
+
+Nouvelle commande pour les tracks dont le fichier audio n'a aucune cover
+embedded (ni APIC ID3 ni covr MP4) : interroge l'iTunes Search API,
+matche fuzzy sur artist + title, telecharge la cover HD (600x600) du
+meilleur match si score >= 0.7, et l'injecte dans le fichier + cache
+Traktor.
+
+### Modifications
+
+- `src/traktord/utils/artwork_search.py` (nouveau) :
+  `search_itunes_cover(artist, title)` retourne les bytes JPEG ou None
+- `src/traktord/utils/trmd.py` :
+  `inject_external_cover(file_path, cover_bytes, coverart_dir)` ecrit
+  une APIC ID3 (MP3/AIFF/WAV) ou un atom covr MP4 (M4A) puis appelle
+  `inject_artwork` pour le pipeline standard (PRIV + cache)
+- `src/traktord/merge_cues.py` :
+  `find_missing_artworks(collection, nml_path)` parcourt la collection,
+  filtre les tracks sans cover, query iTunes pour chaque, injecte si
+  match suffisant, met a jour le NML
+- `src/traktord/gui.py` : nouvelle option **7** dans le menu
+
+### Limitations
+
+- API iTunes uniquement pour V1 (sans cle, gratuite). Discogs / Beatport
+  / MusicBrainz peuvent etre ajoutees en cascade plus tard.
+- Threshold fuzzy match a 0.7 — tunable si trop strict ou trop laxiste.
+- ToS iTunes Search API : usage zone grise pour utilisation commerciale
+  via deck2deck.ch. A clarifier avant promotion massive.
+
+### Tests
+
+- 128/128 passent. Tests unitaires de `search_itunes_cover` non ajoutes
+  (necessitent mocking HTTP, a faire si la feature stabilise).
+
+---
+
 ## [2026-04-26] — v1.7.0 — Support M4A artwork (covr atom MP4)
 
 ### Resume

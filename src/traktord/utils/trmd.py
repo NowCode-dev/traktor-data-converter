@@ -687,6 +687,66 @@ def _load_id3_container(file_path: Path):
     return tags, audio
 
 
+def inject_external_cover(
+    file_path: Path,
+    cover_bytes: bytes,
+    coverart_dir: Optional[Path] = None,
+) -> Optional[str]:
+    """Injecte une cover externe (telechargee depuis une API) dans un fichier.
+
+    Pour MP3/AIFF/WAV : ecrit une APIC ID3 (type Cover Front) puis le PRIV
+    et le cache via le pipeline standard.
+    Pour M4A : ecrit l'atom `covr` puis le cache.
+
+    Args:
+        file_path: Chemin du fichier audio.
+        cover_bytes: Bytes JPEG/PNG de la cover.
+        coverart_dir: Dossier Coverart/ Traktor. Optionnel.
+
+    Returns:
+        Le COVERARTID utilise, ou None si le format n'est pas supporte.
+    """
+    try:
+        from mutagen import File as MutagenFile
+        from mutagen.id3 import ID3, APIC
+        from mutagen.mp4 import MP4, MP4Cover
+    except ImportError as e:
+        raise ImportError("mutagen est requis pour l'injection externe") from e
+
+    try:
+        audio = MutagenFile(str(file_path))
+    except Exception:
+        return None
+    if audio is None:
+        return None
+
+    # Detection MIME basique
+    mime = "image/jpeg"
+    if cover_bytes[:8] == b"\x89PNG\r\n\x1a\n":
+        mime = "image/png"
+
+    tags = getattr(audio, "tags", None)
+
+    if isinstance(tags, ID3):
+        # Supprime les anciennes APIC pour eviter les doublons
+        for key in [k for k in tags.keys() if k.startswith("APIC")]:
+            del tags[key]
+        tags.add(APIC(encoding=3, mime=mime, type=3, desc="Cover", data=cover_bytes))
+        audio.save()
+        # Maintenant que l'APIC est dans le fichier, reinjecte normalement
+        return inject_artwork(file_path, coverart_dir=coverart_dir)
+
+    if isinstance(audio, MP4):
+        fmt = MP4Cover.FORMAT_PNG if mime == "image/png" else MP4Cover.FORMAT_JPEG
+        if audio.tags is None:
+            audio.add_tags()
+        audio.tags["covr"] = [MP4Cover(cover_bytes, imageformat=fmt)]
+        audio.save()
+        return inject_artwork(file_path, coverart_dir=coverart_dir)
+
+    return None
+
+
 def inject_artwork(
     file_path: Path,
     coverart_dir: Optional[Path] = None,

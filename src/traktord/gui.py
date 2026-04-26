@@ -292,7 +292,8 @@ def main() -> None:
     console.print("  [cyan]4[/] — Re-inject artworks (without Traktor re-analysis)")
     console.print("  [cyan]5[/] — Add new tracks (incremental import)")
     console.print("  [cyan]6[/] — Activate unlimited licence")
-    phase = Prompt.ask("Choice", choices=["1", "2", "3", "4", "5", "6"], default="1")
+    console.print("  [cyan]7[/] — Find missing artworks online (iTunes Search API)")
+    phase = Prompt.ask("Choice", choices=["1", "2", "3", "4", "5", "6", "7"], default="1")
 
     # Activation de licence
     if phase == "6":
@@ -455,6 +456,50 @@ def main() -> None:
             console.print(f"  1. Open Traktor → scan {stats['new_tracks']} tracks (a few minutes)")
             console.print(f"  2. Close Traktor")
             console.print(f"  3. Relaunch this tool → Phase 2 (merge cues)")
+
+    elif phase == "7":
+        # Recherche d'artworks manquants en ligne
+        nml_path = traktor_dir / "collection.nml"
+        if not nml_path.exists():
+            console.print(f"[red]collection.nml not found — run Phase 1 first[/]")
+            sys.exit(1)
+
+        console.print()
+        console.print(Panel(
+            "[yellow]For each track without embedded cover, queries the[/]\n"
+            "[yellow]iTunes Search API (free, no key) and injects the[/]\n"
+            "[yellow]matching cover into the audio file + Traktor cache.[/]\n\n"
+            "[red]Modifies the audio files (writes APIC / covr).[/]\n"
+            "Backup of the .nml is automatic. Audio file backups: NONE.",
+            title="[bold yellow]Find missing artworks online[/]",
+            border_style="yellow",
+        ))
+        if not Confirm.ask("Run?", default=True):
+            sys.exit(0)
+
+        from traktord.parsers.rekordbox import RekordboxParser
+        from traktord.merge_cues import find_missing_artworks
+
+        console.print(f"\n[cyan]Reading {xml_path}...[/]")
+        parser = RekordboxParser()
+        collection = parser.parse(xml_path)
+        console.print(f"  [green]{len(collection.tracks)}[/] tracks")
+
+        console.print("[cyan]Searching missing artworks...[/]")
+        stats = find_missing_artworks(collection, nml_path)
+
+        console.print()
+        console.print(Panel(
+            f"Tested              : {stats['tested']}\n"
+            f"Already had cover   : [dim]{stats['already_had_cover']}[/]\n"
+            f"Found via iTunes    : [green]{stats['found_external']}[/]\n"
+            f"Not found online    : [yellow]{stats['not_found']}[/]\n"
+            f"Errors              : [red]{stats['errors']}[/]\n"
+            f"NML entries updated : [green]{stats['nml_updated']}[/]\n\n"
+            f"Backup : [dim]{stats['backup'].name}[/]",
+            title="[bold green]OK[/]",
+            border_style="green",
+        ))
 
     else:
         nml_path = traktor_dir / "collection.nml"
